@@ -1,3 +1,4 @@
+// Updated MteamPortal: WhatsApp sharing includes the Google Play Install Referrer code.
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -200,13 +201,36 @@ const IcWhatsApp = () => (
 );
 
 const APP_LINK =
-  "https://play.google.com/store/apps/details?id=com.mlmbooster.mlmbooster&hl=en?usp=sharing";
+  "https://play.google.com/store/apps/details?id=com.mlmbooster.mlmbooster";
+
+const normalizeReferralCode = (value) => {
+  if (typeof value !== "string") return "";
+
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "")
+    .slice(0, 8);
+};
+
+const createPlayStoreReferralLink = (referCode) => {
+  const code = normalizeReferralCode(referCode);
+  if (!code) return "";
+
+  // Produces: &referrer=ref%3DBYCO9418
+  return `${APP_LINK}&referrer=${encodeURIComponent(`ref=${code}`)}`;
+};
 
 const ALL_TABS = [
   { id: "dashboard", label: "Dashboard", shortLabel: "Home", icon: IcGrid },
   { id: "reports", label: "Reports", shortLabel: "Reports", icon: IcReport },
   { id: "leads", label: "Leads", shortLabel: "Leads", icon: IcLeads },
-  { id: "freshleads", label: "Fresh Lead", shortLabel: "Fresh Lead", icon: IcFreshLead },
+  {
+    id: "freshleads",
+    label: "Fresh Lead",
+    shortLabel: "Fresh Lead",
+    icon: IcFreshLead,
+  },
   { id: "team", label: "My Team", shortLabel: "Team", icon: IcTeam },
 ];
 
@@ -269,7 +293,9 @@ export default function MteamPortal() {
           );
           if (!cSnap.empty) couponDoc = cSnap.docs[0].data();
         }
-        if (couponDoc?.code) setCouponCode(couponDoc.code);
+        if (couponDoc?.code) {
+          setCouponCode(normalizeReferralCode(couponDoc.code));
+        }
       } catch (_) {}
     };
     fetchCoupon();
@@ -327,8 +353,28 @@ export default function MteamPortal() {
   };
 
   const handleWhatsAppShare = () => {
-    const name = session.name ?? "मैं";
-    const code = couponCode || "मेरा रेफरल कोड";
+    const code = normalizeReferralCode(
+      couponCode ||
+        session?.couponCode ||
+        session?.referCode ||
+        session?.referralCode ||
+        "",
+    );
+
+    if (!code) {
+      alert(
+        "Referral code अभी नहीं मिला। कृपया कुछ सेकंड बाद दोबारा Share करें।",
+      );
+      return;
+    }
+
+    const referralLink = createPlayStoreReferralLink(code);
+
+    if (!referralLink) {
+      alert("Referral link नहीं बन पाया। कृपया दोबारा प्रयास करें।");
+      return;
+    }
+
     const message = `
     
     🔥 MLM LIVE Offer 🔥
@@ -348,7 +394,7 @@ export default function MteamPortal() {
 🎁 Special Offer:
 मेरे 🎁  *Referral Code: ${code}*  से Join करें और Unlimited Banner बनाएं बिना किसी Charge के।
 
-📲 Download Now ${APP_LINK}
+📲 Download Now ${referralLink}
 `;
 
     const encoded = encodeURIComponent(message);
@@ -696,7 +742,24 @@ export default function MteamPortal() {
 
         {/* Logout */}
         <div style={{ padding: "6px 8px 16px" }}>
-          <button onClick={() => navigate("/security")} style={{display:"flex",padding:"11px 14px",marginBottom:8,borderRadius:10,border:"1px solid #6366f140",cursor:"pointer",fontSize:14,fontWeight:600,color:"#6366f1",background:"#6366f108",width:"100%"}}>Login Activity</button>
+          <button
+            onClick={() => navigate("/security")}
+            style={{
+              display: "flex",
+              padding: "11px 14px",
+              marginBottom: 8,
+              borderRadius: 10,
+              border: "1px solid #6366f140",
+              cursor: "pointer",
+              fontSize: 14,
+              fontWeight: 600,
+              color: "#6366f1",
+              background: "#6366f108",
+              width: "100%",
+            }}
+          >
+            Login Activity
+          </button>
           <button
             onClick={handleLogout}
             style={{

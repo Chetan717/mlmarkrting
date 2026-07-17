@@ -68,40 +68,77 @@ const getMarketingUser = () => {
   }
 };
 
+const findReferralCode = (value, depth = 0) => {
+  if (!value || depth > 5) return "";
+
+  if (typeof value === "string") {
+    try {
+      return findReferralCode(JSON.parse(value), depth + 1);
+    } catch {
+      return "";
+    }
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const code = findReferralCode(item, depth + 1);
+
+      if (code) return code;
+    }
+
+    return "";
+  }
+
+  if (typeof value !== "object") return "";
+
+  for (const [key, fieldValue] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, "");
+
+    const isReferralField =
+      normalizedKey === "refercode" ||
+      normalizedKey === "refcode" ||
+      normalizedKey === "referralcode" ||
+      normalizedKey === "couponcode" ||
+      normalizedKey === "myrefercode" ||
+      normalizedKey === "myreferralcode";
+
+    if (isReferralField) {
+      const code = normalizeReferralCode(String(fieldValue ?? ""));
+
+      if (code) return code;
+    }
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    if (nestedValue && typeof nestedValue === "object") {
+      const code = findReferralCode(nestedValue, depth + 1);
+
+      if (code) return code;
+    }
+  }
+
+  return "";
+};
+
 const getUserReferralCode = () => {
   const savedUser = getMarketingUser();
 
-  return normalizeReferralCode(
-    savedUser?.referCode ||
-      savedUser?.refCode ||
-      savedUser?.referralCode ||
-      savedUser?.couponCode ||
-      savedUser?.user?.referCode ||
-      savedUser?.user?.refCode ||
-      savedUser?.user?.referralCode ||
-      savedUser?.user?.couponCode ||
-      savedUser?.data?.referCode ||
-      savedUser?.data?.refCode ||
-      savedUser?.data?.referralCode ||
-      savedUser?.data?.couponCode ||
-      "",
-  );
+  return findReferralCode(savedUser);
 };
 
 const createPlayStoreReferralLink = (referCode) => {
   const code = normalizeReferralCode(referCode);
-  const playStoreLink = new URL(PLAY_STORE_URL);
 
-  if (code) {
-    playStoreLink.searchParams.set(
-      "referrer",
-      new URLSearchParams({
-        ref: code,
-      }).toString(),
-    );
-  }
+  if (!code) return "";
 
-  return playStoreLink.toString();
+  /*
+   * It will generate:
+   *
+   * https://play.google.com/store/apps/details
+   * ?id=com.mlmbooster.mlmbooster
+   * &referrer=ref%3DBYCO9418
+   */
+  return `${PLAY_STORE_URL}&referrer=${encodeURIComponent(`ref=${code}`)}`;
 };
 
 const copyShareMessage = async (message) => {
@@ -122,6 +159,7 @@ const copyShareMessage = async (message) => {
       textarea.select();
 
       document.execCommand("copy");
+
       document.body.removeChild(textarea);
 
       return true;
@@ -159,6 +197,10 @@ export default function Sidebar({
   const handleShareApp = async () => {
     const referCode = getUserReferralCode();
 
+    /*
+     * Do not share a normal Play Store link if the
+     * referral code is not available.
+     */
     if (!referCode) {
       alert(
         "Referral code not found. Please login again or check your marketing profile.",
@@ -168,6 +210,11 @@ export default function Sidebar({
 
     const referralLink = createPlayStoreReferralLink(referCode);
 
+    if (!referralLink.includes("&referrer=ref%3D")) {
+      alert("Referral link could not be created. Please try again.");
+      return;
+    }
+
     const shareMessage =
       `🌟 Join MLM LIVE & Grow Your Network!\n\n` +
       `Create professional MLM marketing banners, posters and social media designs easily.\n\n` +
@@ -176,8 +223,7 @@ export default function Sidebar({
       `${referralLink}`;
 
     /*
-     * If marketing panel is running inside MLM LIVE WebView,
-     * send the message to the React Native native share sheet.
+     * MLM LIVE React Native WebView share.
      */
     if (window.ReactNativeWebView?.postMessage) {
       window.ReactNativeWebView.postMessage(
@@ -195,14 +241,17 @@ export default function Sidebar({
     }
 
     /*
-     * Normal mobile/desktop browser share.
+     * Browser native share.
+     *
+     * URL is intentionally kept inside the text.
+     * A separate URL field may remove referral parameters
+     * in some Android browsers/share targets.
      */
     if (navigator.share) {
       try {
         await navigator.share({
           title: "MLM LIVE",
           text: shareMessage,
-          url: referralLink,
         });
 
         setMobileOpen(false);
@@ -215,12 +264,12 @@ export default function Sidebar({
     }
 
     /*
-     * Clipboard fallback for browsers without Web Share API.
+     * Clipboard fallback.
      */
     const copied = await copyShareMessage(shareMessage);
 
     if (copied) {
-      alert("Referral link copied successfully!");
+      alert(`Referral link copied successfully!\n\n${referralLink}`);
     } else {
       alert(`Please copy this referral link:\n\n${referralLink}`);
     }
