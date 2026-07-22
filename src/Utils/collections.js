@@ -9,4 +9,5 @@ export const COLL = {
   MLMPROFILES:  import.meta.env.VITE_COLL_MLMPROFILES  || "mlmprofiles",
   LEADS:        import.meta.env.VITE_COLL_LEADS        || "leadBysubuserMarketingMember",
   FRESHLEADS:   import.meta.env.VITE_COLL_FRESHLEADS   || "freshleads",
+  TASKM:        import.meta.env.VITE_COLL_TASKM         || "Taskm",
 };

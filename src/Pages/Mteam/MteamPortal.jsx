@@ -16,6 +16,7 @@ import TeamUserManagement from "./TeamUserManagement";
 import MonthWiseReport from "./MonthWiseReport";
 import LeadManagement from "./LeadManagement";
 import FreshLead from "./FreshLead";
+import TaskManagement from "./TaskManagement";
 import { useTheme } from "../../Context/ThemeContext";
 import {
   getSession,
@@ -109,6 +110,21 @@ const IcTeam = ({ size = 18 }) => (
     <circle cx="9" cy="7" r="4" />
     <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+const IcTasks = ({ size = 18 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M9 5h11M9 12h11M9 19h11" />
+    <path d="m3.5 5 1 1 2-2M3.5 12l1 1 2-2M3.5 19l1 1 2-2" />
   </svg>
 );
 const IcLogout = () => (
@@ -231,32 +247,32 @@ const ALL_TABS = [
     shortLabel: "Fresh Lead",
     icon: IcFreshLead,
   },
+  { id: "taskmanagement", label: "Task Management", shortLabel: "Tasks", icon: IcTasks },
   { id: "team", label: "My Team", shortLabel: "Team", icon: IcTeam },
 ];
 
 export default function MteamPortal() {
   const navigate = useNavigate();
-  const { logout } = useMarketingAuth();
+  const { logout, session } = useMarketingAuth();
   const { theme, toggle } = useTheme();
-  const [session, setSession] = useState(null);
-  const [activeTab, setActiveTab] = useState(null);
+  const [activeTab, setActiveTab] = useState(() => {
+    const current = getSession();
+    const allowed = current?.tabs ?? ["dashboard"];
+    return allowed[0] ?? "dashboard";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [sessionExpiry, setSessionExpiry] = useState(null);
+  const [sessionExpiry] = useState(() => getSession()?._expiresAt ?? null);
   const [couponCode, setCouponCode] = useState("");
   const profileRef = useRef(null);
 
   useEffect(() => {
-    const s = getSession();
+    const s = session || getSession();
     if (!s) {
       navigate("/login", { replace: true });
       return;
     }
-    setSession(s);
-    const allowed = s.tabs ?? ["dashboard"];
-    setActiveTab(allowed[0] ?? "dashboard");
     refreshSession();
-    if (s._expiresAt) setSessionExpiry(s._expiresAt);
 
     // Fetch coupon code for WhatsApp share
     const fetchCoupon = async () => {
@@ -282,7 +298,9 @@ export default function MteamPortal() {
               doc(db, "couponcode", mt.assign_coupon_id),
             );
             if (cSnap.exists()) couponDoc = cSnap.data();
-          } catch (_) {}
+          } catch {
+            // The assigned-user lookup below is the fallback for old records.
+          }
         }
         if (!couponDoc) {
           const cSnap = await getDocs(
@@ -296,7 +314,9 @@ export default function MteamPortal() {
         if (couponDoc?.code) {
           setCouponCode(normalizeReferralCode(couponDoc.code));
         }
-      } catch (_) {}
+      } catch {
+        setCouponCode("");
+      }
     };
     fetchCoupon();
 
@@ -307,7 +327,7 @@ export default function MteamPortal() {
       window.removeEventListener("click", extend);
       window.removeEventListener("keydown", extend);
     };
-  }, [navigate]);
+  }, [navigate, session]);
 
   // Check session validity every minute
   useEffect(() => {
@@ -407,6 +427,7 @@ export default function MteamPortal() {
       return <MonthWiseReport mteamId={session.mteamId} mobile={dataMobile} />;
     if (activeTab === "leads") return <LeadManagement mteamSession={session} />;
     if (activeTab === "freshleads") return <FreshLead mteamSession={session} />;
+    if (activeTab === "taskmanagement") return <TaskManagement mteamSession={session} />;
     if (activeTab === "team" && isMember)
       return <TeamUserManagement mteamId={session.mteamId} />;
     return (

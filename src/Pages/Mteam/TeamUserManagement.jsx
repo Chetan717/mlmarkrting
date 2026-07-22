@@ -10,6 +10,7 @@ const ALL_TABS = [
   { id: "reports",   label: "Monthly Report",        desc: "Month-wise subscription & revenue report" },
   { id: "leads",     label: "Lead Management",       desc: "New users, renewals, early expiry & follow-ups" },
   { id: "freshleads", label: "Fresh Lead",           desc: "Manually added leads — add, edit, call & follow up" },
+  { id: "taskmanagement", label: "Task Management",  desc: "Create, edit, track and delete admin tasks" },
 ];
 
 const DEFAULT_FORM = {
@@ -18,6 +19,13 @@ const DEFAULT_FORM = {
   active: true,
   tabs: ["dashboard"],
 };
+
+function withoutLegacyCredentials(user) {
+  const safeUser = { ...user };
+  delete safeUser.password;
+  delete safeUser._showPw;
+  return safeUser;
+}
 
 function validate(form) {
   const e = {};
@@ -95,7 +103,7 @@ export default function TeamUserManagement({ mteamId }) {
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     if (editIndex === null) {
-      const duplicate = team.find((u, i) => u.mobile === form.mobile);
+      const duplicate = team.find((u) => u.mobile === form.mobile);
       if (duplicate) {
         setErrors({ mobile: "Mobile already exists in team" });
         return;
@@ -118,7 +126,7 @@ export default function TeamUserManagement({ mteamId }) {
           i === editIndex ? { ...u, ...form, updatedAt: new Date().toISOString() } : u
         );
       }
-      newTeam = newTeam.map(({ password: _legacyPassword, _showPw, ...u }) => u);
+      newTeam = newTeam.map(withoutLegacyCredentials);
       await updateDoc(doc(db, "mteam", mteamId), {
         team: newTeam,
         updatedAt: serverTimestamp(),
@@ -136,7 +144,7 @@ export default function TeamUserManagement({ mteamId }) {
   const handleDelete = async (idx) => {
     setSaving(true);
     try {
-      const newTeam = team.filter((_, i) => i !== idx).map(({ password: _legacyPassword, ...u }) => u);
+      const newTeam = [...team.slice(0, idx), ...team.slice(idx + 1)].map(withoutLegacyCredentials);
       await updateDoc(doc(db, "mteam", mteamId), {
         team: newTeam,
         updatedAt: serverTimestamp(),
@@ -153,7 +161,7 @@ export default function TeamUserManagement({ mteamId }) {
   const toggleActive = async (idx) => {
     const newTeam = team.map((u, i) =>
       i === idx ? { ...u, active: !u.active } : u
-    ).map(({ password: _legacyPassword, ...u }) => u);
+    ).map(withoutLegacyCredentials);
     setTeam(newTeam);
     try {
       await updateDoc(doc(db, "mteam", mteamId), { team: newTeam });
