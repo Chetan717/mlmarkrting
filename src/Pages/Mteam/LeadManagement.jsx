@@ -703,44 +703,7 @@ export default function LeadManagement({ mteamSession }) {
     }
   };
 
-  // ── export CSV ───────────────────────────────────────────────────────────
-  const handleExportCSV = () => {
-    const rows = filteredLeads.map(({ user, subscription, mlmProfile }) => {
-      const fu = followups[user.id];
-      const days = subscription ? daysLeft(subscription.expirydate) : null;
-      return {
-        "Name": user.name ?? "",
-        "Mobile": user.mobileNo ?? "",
-        "Referred By": user.referredBy ?? "",
-        "Verified": user.isverified ? "Yes" : "No",
-        "MLM Profile": mlmProfile ? "Yes" : "No",
-        "Company": mlmProfile?.companyName ?? "",
-        "Plan Status": subscription ? (subscription.Active && !subscription.Expire ? "Active" : "Expired") : "No Plan",
-        "Is Renewal Lead": subscription?.Expire ? "Yes" : "No",
-        "Plan": subscription?.plan ?? "",
-        "Expiry": subscription?.expirydate ?? "",
-        "Days Left": days !== null ? (days <= 0 ? "Expired" : `${days}`) : "",
-        "Lead Status": fu?.leadStatus ?? "New",
-        "Last Followup": fu?.lastFollowupNote ?? "",
-        "Next Followup": fu?.nextFollowupDate ?? "",
-        "Joined": user.createdAt?.toDate ? user.createdAt.toDate().toLocaleDateString("en-IN") : "",
-      };
-    });
-    if (!rows.length) return;
-    const headers = Object.keys(rows[0]);
-    const csv = [
-      headers.join(","),
-      ...rows.map(r => headers.map(h => `"${String(r[h]).replace(/"/g, '""')}"`).join(","))
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `leads_${fromDate}_to_${toDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
+  
   const clearFilters = () => {
     setFilters({ search: "", leadStatus: "all", planStatus: "all", mlmProfile: "all", expiringIn: "all", company: "all" });
     setPage(1);
@@ -828,7 +791,7 @@ export default function LeadManagement({ mteamSession }) {
           )}
         </button>
 
-        {fetched && (
+        {/* {fetched && (
           <>
             <button onClick={handleExportCSV} style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 18px", borderRadius: 10, border: "1.5px solid #10b98140", background: "#10b98115", color: "#10b981", fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>
               <IcDownload /> CSV
@@ -837,7 +800,7 @@ export default function LeadManagement({ mteamSession }) {
               {filteredLeads.length}/{leads.length}
             </span>
           </>
-        )}
+        )} */}
       </div>
 
       {/* ── TODAY'S FOLLOW-UPS ───────────────────────────────────────────── */}
