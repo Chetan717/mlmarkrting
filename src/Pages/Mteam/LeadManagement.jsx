@@ -75,6 +75,7 @@ const IcPhone = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none
 const IcWhatsapp = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" /><path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.556 4.121 1.523 5.849L.057 23.97l6.29-1.647A11.956 11.956 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm.029 21.818a9.841 9.841 0 0 1-5.012-1.366l-.36-.214-3.732.978.994-3.634-.235-.374A9.831 9.831 0 0 1 2.18 12c0-5.432 4.418-9.849 9.849-9.849 5.432 0 9.849 4.417 9.849 9.849 0 5.432-4.417 9.818-9.849 9.818z" /></svg>;
 const IcEdit = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>;
 const IcEye = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>;
+const IcEyeOff = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20C5 20 1 12 1 12a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><path d="M14.12 14.12A3 3 0 0 1 9.88 9.88" /><line x1="1" y1="1" x2="23" y2="23" /></svg>;
 const IcDownload = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>;
 const IcRefresh = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-4.9" /></svg>;
 const IcX = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>;
@@ -113,6 +114,38 @@ function PlanStatusBadge({ subscription }) {
   if (subscription.Active && !subscription.Expire) return <span style={{ padding: "2px 9px", borderRadius: 6, background: "#10b98115", color: "#10b981", fontSize: 11, fontWeight: 700 }}>Active</span>;
   if (subscription.Expire) return <span style={{ padding: "2px 9px", borderRadius: 6, background: "#ef444415", color: "#ef4444", fontSize: 11, fontWeight: 700 }}>Expired</span>;
   return <span style={{ padding: "2px 9px", borderRadius: 6, background: "#f59e0b15", color: "#f59e0b", fontSize: 11, fontWeight: 700 }}>Inactive</span>;
+}
+
+function PasswordValue({ value, revealed, onToggle }) {
+  const password = typeof value === "string" ? value : "";
+  if (!password) return <span style={{ color: "var(--p-text-4)", fontSize: 12 }}>—</span>;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 118 }}>
+      <span
+        title={revealed ? password : "Password hidden"}
+        style={{
+          color: "var(--p-text-3)", fontFamily: "monospace", fontSize: 12,
+          maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}
+      >
+        {revealed ? password : "••••••••"}
+      </span>
+      <button
+        type="button"
+        onClick={onToggle}
+        title={revealed ? "Hide password" : "Show password"}
+        aria-label={revealed ? "Hide password" : "Show password"}
+        style={{
+          width: 28, height: 28, flexShrink: 0, display: "inline-flex", alignItems: "center",
+          justifyContent: "center", borderRadius: 8, cursor: "pointer",
+          background: "#6366f115", color: "#a5b4fc", border: "1px solid #6366f130",
+        }}
+      >
+        {revealed ? <IcEyeOff /> : <IcEye />}
+      </button>
+    </div>
+  );
 }
 
 // "Renewal" badge shown when user has expired subscription
@@ -388,6 +421,7 @@ export default function LeadManagement({ mteamSession }) {
     mlmProfile: "all", expiringIn: "all", company: "all",
   });
   const [page, setPage] = useState(1);
+  const [revealedPasswords, setRevealedPasswords] = useState(() => new Set());
   const [batchSelected, setBatch] = useState([]);
   const [batchStatus, setBatchSt] = useState("Follow Up");
   const [batchSaving, setBatchSaving] = useState(false);
@@ -714,6 +748,15 @@ export default function LeadManagement({ mteamSession }) {
 
   const setFilter = (key, val) => { setFilters(f => ({ ...f, [key]: val })); setPage(1); };
   const toggleBatch = (id) => setBatch(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const togglePassword = (user) => {
+    const key = user.id || user.mobileNo;
+    setRevealedPasswords(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const toggleAllBatch = () => {
     const ids = visibleLeads.map(l => l.user.id);
     const allSel = ids.every(id => batchSelected.includes(id));
@@ -971,7 +1014,7 @@ export default function LeadManagement({ mteamSession }) {
             <>
               {/* Desktop table */}
               <div className="leads-table-wrap" style={{ overflowX: "auto", borderRadius: 14, border: "1px solid var(--p-border)", marginBottom: 16 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
                   <thead>
                     <tr style={{ background: "var(--p-card2)" }}>
                       <th style={th()}>
@@ -982,6 +1025,7 @@ export default function LeadManagement({ mteamSession }) {
                       <th style={th()}>User</th>
                       <th style={th()}>Joined</th>
                       <th style={th()}>Mobile</th>
+                      <th style={th()}>Password</th>
                       <th style={th()}>MLM Profile</th>
                       <th style={th()}>Plan Status</th>
                       <th style={th()}>Plan</th>
@@ -999,6 +1043,8 @@ export default function LeadManagement({ mteamSession }) {
                       const isSel = batchSelected.includes(user.id);
                       const isUrgent = days !== null && days >= 0 && days <= 3;
                       const isRenewal = subscription?.Expire === true;
+                      const passwordKey = user.id || user.mobileNo;
+                      const isPasswordRevealed = revealedPasswords.has(passwordKey);
 
                       return (
                         <tr key={user.id} style={{ background: isUrgent ? "#ef444408" : idx % 2 === 1 ? "var(--p-bg)" : "transparent", transition: "background 0.15s" }}>
@@ -1031,6 +1077,13 @@ export default function LeadManagement({ mteamSession }) {
                           </td>
                           <td style={td()}>
                             <span style={{ fontSize: 13, color: "var(--p-text-3)" }}>{user.mobileNo}</span>
+                          </td>
+                          <td style={td()}>
+                            <PasswordValue
+                              value={user.password}
+                              revealed={isPasswordRevealed}
+                              onToggle={() => togglePassword(user)}
+                            />
                           </td>
                           <td style={td()}>
                             <span style={{
@@ -1096,6 +1149,8 @@ export default function LeadManagement({ mteamSession }) {
                   const isSel = batchSelected.includes(user.id);
                   const isUrgent = days !== null && days >= 0 && days <= 3;
                   const isRenewal = subscription?.Expire === true;
+                  const passwordKey = user.id || user.mobileNo;
+                  const isPasswordRevealed = revealedPasswords.has(passwordKey);
                   return (
                     <div key={user.id} style={{
                       background: "var(--p-card)",
@@ -1119,6 +1174,21 @@ export default function LeadManagement({ mteamSession }) {
                           </div>
                           <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--p-text-3)" }}>{user.mobileNo}</p>
                         </div>
+                      </div>
+
+                      <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        gap: 10, marginBottom: 10, padding: "8px 10px",
+                        background: "var(--p-card2)", border: "1px solid var(--p-border)", borderRadius: 9,
+                      }}>
+                        <span style={{ color: "var(--p-text-4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          Password
+                        </span>
+                        <PasswordValue
+                          value={user.password}
+                          revealed={isPasswordRevealed}
+                          onToggle={() => togglePassword(user)}
+                        />
                       </div>
 
                       {/* Badges row */}
