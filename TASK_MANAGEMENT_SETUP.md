@@ -5,7 +5,7 @@ The Marketing portal writes directly to the Firestore `Taskm` collection. No Clo
 ## Required deployment
 
 Deploy the included Firestore rules and indexes from this project:
-
+hh
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes
 ```
