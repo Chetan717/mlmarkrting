@@ -1,11 +1,16 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   collection, getDocs, query, where, doc, setDoc,
-  serverTimestamp, Timestamp, orderBy, limit,
+  serverTimestamp, Timestamp, orderBy,
 } from "firebase/firestore";
 import { db, functions } from "../../../Firebase";
 import { httpsCallable } from "firebase/functions";
 import { COLL } from "../../Utils/collections";
+import {
+  fetchMlmProfiles,
+  getMlmProfileByMobile,
+  indexMlmProfiles,
+} from "../../Utils/mlmProfile";
 import { getSession } from "../../Utils/sessionManager";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -491,8 +496,7 @@ export default function LeadManagement({ mteamSession }) {
         query(
           collection(db, COLL.USERS),
           where("referredByMteam", "==", mteamId),
-          orderBy("createdAt", "desc"),
-          limit(300)
+          orderBy("createdAt", "desc")
         )
       );
       const usersMap = {};
@@ -543,9 +547,9 @@ export default function LeadManagement({ mteamSession }) {
 
       // 3. mlm profiles for these users
       const mobiles = allUsers.map(u => u.mobileNo).filter(Boolean);
-      const profilesByMobile = {};
-      const profileResult = await httpsCallable(functions, "marketingGetProfiles")({ mobiles });
-      (profileResult.data.profiles || []).forEach(p => { profilesByMobile[p.mobile] = p; });
+      const profileLookup = httpsCallable(functions, "marketingGetProfiles");
+      const profiles = await fetchMlmProfiles(mobiles, profileLookup);
+      const profilesByMobile = indexMlmProfiles(profiles);
 
       // 4. followups for this mteam
       const fuSnap = await getDocs(
@@ -563,7 +567,7 @@ export default function LeadManagement({ mteamSession }) {
         .map(user => ({
           user,
           subscription: subsByMobile[user.mobileNo] ?? null,
-          mlmProfile: profilesByMobile[user.mobileNo] ?? null,
+          mlmProfile: getMlmProfileByMobile(profilesByMobile, user.mobileNo),
           followup: fuByUserId[user.id] ?? null,
         }))
         .filter(({ subscription }) => isValidLead(subscription));
@@ -908,7 +912,7 @@ export default function LeadManagement({ mteamSession }) {
             <select value={filters.mlmProfile} onChange={e => setFilter("mlmProfile", e.target.value)}
               style={{ padding: "8px 12px", background: "var(--p-card)", border: "1.5px solid var(--p-border)", borderRadius: 10, color: "var(--p-text)", fontSize: 13, outline: "none" }}>
               <option value="all">All Profiles</option>
-              <option value="hasMlm">Have MLM Profile</option>
+              <option value="hasMlm">Has MLM Profile</option>
               <option value="noMlm">No MLM Profile</option>
             </select>
 

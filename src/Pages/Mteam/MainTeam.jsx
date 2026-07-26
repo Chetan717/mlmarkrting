@@ -1,10 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
 import {
-  getFirestore, collection, query, where, getDocs, doc, getDoc,
+  collection, query, where, getDocs, doc, getDoc,
 } from "firebase/firestore";
 import { db, functions } from "../../../Firebase";
 import { httpsCallable } from "firebase/functions";
 import { COLL } from "../../Utils/collections";
+import {
+  calculateMlmProfileStats,
+  fetchMlmProfiles,
+} from "../../Utils/mlmProfile";
 
 // ── Date helper ──────────────────────────────────────────────
 const MONTHS_MAP = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
@@ -21,11 +25,6 @@ function parseDMY(str) {
   const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso) return new Date(Number(iso[1]),Number(iso[2])-1,Number(iso[3]));
   return null;
-}
-function chunkArray(arr, size) {
-  const out = [];
-  for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size));
-  return out;
 }
 function getPurchaseTs(sub) {
   if (!sub.PurchaseAt) return 0;
@@ -288,8 +287,8 @@ export default function MarketingDashboard({ mteamSession } = {}) {
 
         // E: mlm profiles for referred users
         const mobiles = referred.map(u => u.mobileNo).filter(Boolean);
-        const profileResult = await httpsCallable(functions, "marketingGetProfiles")({ mobiles });
-        const profiles = profileResult.data.profiles || [];
+        const profileLookup = httpsCallable(functions, "marketingGetProfiles");
+        const profiles = await fetchMlmProfiles(mobiles, profileLookup);
         setMlmProfiles(profiles);
 
       } catch (e) {
@@ -343,9 +342,14 @@ export default function MarketingDashboard({ mteamSession } = {}) {
   }, [subsByUser, commPct]);
 
   // ── Referred Users stats ──────────────────────────────────
-  const profileMobiles      = new Set(mlmProfiles.map(p => p.mobile));
-  const createdProfileCount = referredUsers.filter(u => profileMobiles.has(u.mobileNo)).length;
-  const noProfileCount      = referredUsers.filter(u => !profileMobiles.has(u.mobileNo)).length;
+  const {
+    totalUsers,
+    hasProfileCount,
+    noProfileCount,
+  } = useMemo(
+    () => calculateMlmProfileStats(referredUsers, mlmProfiles),
+    [referredUsers, mlmProfiles]
+  );
 
   // ── Subscription stats ────────────────────────────────────
   const { totalActiveSubs, newSubCount, renewalSubCount, expiredSubCount } = useMemo(() => {
@@ -471,12 +475,12 @@ export default function MarketingDashboard({ mteamSession } = {}) {
           <div className="stat-grid-users" style={{ marginBottom:22 }}>
             <StatCard icon={<IcUsers />} accent="#6366f1" big
               label="Total Users"
-              value={referredUsers.length}
+              value={totalUsers}
               sub="referred by you"
             />
             <StatCard icon={<IcStar />} accent="#10b981"
-              label="Created MLM Profile"
-              value={createdProfileCount}
+              label="Has MLM Profile"
+              value={hasProfileCount}
               sub="have a profile"
             />
             <StatCard icon={<IcMinus />} accent="#94a3b8"
