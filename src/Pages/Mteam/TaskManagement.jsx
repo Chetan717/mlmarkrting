@@ -13,12 +13,20 @@ import {
 } from "firebase/firestore";
 import { db } from "../../../Firebase";
 import { COLL } from "../../Utils/collections";
+import {
+  getTaskRole,
+  getTaskRoleLabel,
+  normalizeTaskRoleKey,
+  TASK_ROLE_OPTIONS,
+  TASK_STATUSES,
+} from "../../Utils/taskManagement";
 
-const STATUSES = ["Initiated", "Pending", "Completed"];
+const STATUSES = TASK_STATUSES;
 const PAGE_SIZES = [10, 20, 50];
 
 const STATUS_META = {
   Initiated: { className: "tm-status-initiated", label: "Initiated" },
+  Working: { className: "tm-status-working", label: "Working" },
   Pending: { className: "tm-status-pending", label: "Pending" },
   Completed: { className: "tm-status-completed", label: "Completed" },
 };
@@ -144,12 +152,14 @@ function Pagination({ page, totalPages, onChange }) {
 
 function TaskFormDialog({ task, saving, onSave, onClose }) {
   const editing = Boolean(task);
+  const existingRole = getTaskRole(task?.assignedRoleKey || task?.assignedRole);
   const [form, setForm] = useState({
     name: task?.name || "",
     taskDate: task?.taskDate || localDateValue(),
     description: task?.description || "",
     companyName: task?.companyName || "",
     status: STATUSES.includes(task?.status) ? task.status : "Initiated",
+    assignedRoleKey: existingRole.key,
   });
   const [error, setError] = useState("");
 
@@ -160,16 +170,19 @@ function TaskFormDialog({ task, saving, onSave, onClose }) {
 
   const submit = async (event) => {
     event.preventDefault();
+    const selectedRole = getTaskRole(form.assignedRoleKey);
     const payload = {
       name: form.name.trim(),
       taskDate: form.taskDate,
       description: form.description.trim(),
       companyName: form.companyName.trim(),
       status: form.status,
+      assignedRoleKey: selectedRole.key,
+      assignedRole: selectedRole.label,
     };
 
-    if (!payload.name || !payload.taskDate || !payload.description) {
-      setError("Task name, date and description are required.");
+    if (!payload.name || !payload.taskDate || !payload.description || !normalizeTaskRoleKey(payload.assignedRoleKey)) {
+      setError("Task name, date, description and assigned role are required.");
       return;
     }
 
@@ -186,7 +199,7 @@ function TaskFormDialog({ task, saving, onSave, onClose }) {
         <div className="tm-modal-head">
           <div>
             <h2 id="task-form-title">{editing ? "Edit Task" : "Create New Task"}</h2>
-            <p>This task will be visible to the company admin.</p>
+            <p>Select the admin-panel role responsible for this task.</p>
           </div>
           <button type="button" className="tm-close" onClick={onClose} disabled={saving} aria-label="Close">×</button>
         </div>
@@ -222,12 +235,19 @@ function TaskFormDialog({ task, saving, onSave, onClose }) {
             </label>
 
             <label className="tm-field">
-              <span>Status *</span>
-              <select value={form.status} onChange={(event) => set("status", event.target.value)}>
-                {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+              <span>Assign To Role *</span>
+              <select value={form.assignedRoleKey} onChange={(event) => set("assignedRoleKey", event.target.value)}>
+                {TASK_ROLE_OPTIONS.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}
               </select>
             </label>
           </div>
+
+          <label className="tm-field">
+            <span>Status *</span>
+            <select value={form.status} onChange={(event) => set("status", event.target.value)}>
+              {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </label>
 
           <label className="tm-field">
             <span>Description *</span>
@@ -267,6 +287,7 @@ export default function TaskManagement({ mteamSession }) {
   const [busyTaskId, setBusyTaskId] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
@@ -317,13 +338,14 @@ export default function TaskManagement({ mteamSession }) {
     const needle = search.trim().toLowerCase();
     return tasks.filter((task) => {
       if (statusFilter && task.status !== statusFilter) return false;
+      if (roleFilter && normalizeTaskRoleKey(task.assignedRoleKey || task.assignedRole) !== roleFilter) return false;
       if (dateFrom && String(task.taskDate || "") < dateFrom) return false;
       if (dateTo && String(task.taskDate || "") > dateTo) return false;
       if (!needle) return true;
-      return [task.name, task.description, task.companyName, task.createdByName]
+      return [task.name, task.description, task.companyName, task.createdByName, task.assignedRole]
         .some((value) => String(value || "").toLowerCase().includes(needle));
     });
-  }, [tasks, search, statusFilter, dateFrom, dateTo]);
+  }, [tasks, search, statusFilter, roleFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTasks.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -351,7 +373,7 @@ export default function TaskManagement({ mteamSession }) {
           updatedByName: mteamSession.name || "Marketing Member",
           updatedByPanel: "marketing",
         });
-        showFeedback("success", "Task updated successfully. Admin can see the latest changes.");
+        showFeedback("success", `Task updated and assigned to ${payload.assignedRole}.`);
       } else {
         await addDoc(collection(db, COLL.TASKM), {
           ...payload,
@@ -368,7 +390,7 @@ export default function TaskManagement({ mteamSession }) {
           updatedByName: mteamSession.name || "Marketing Member",
           updatedByPanel: "marketing",
         });
-        showFeedback("success", "Task created and sent to the company admin.");
+        showFeedback("success", `Task created and sent to the ${payload.assignedRole} role.`);
       }
       setDialog(null);
     } catch (error) {
@@ -443,6 +465,7 @@ export default function TaskManagement({ mteamSession }) {
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("");
+    setRoleFilter("");
     setDateFrom("");
     setDateTo("");
     setPage(1);
@@ -468,7 +491,7 @@ export default function TaskManagement({ mteamSession }) {
     });
   };
 
-  const filtersActive = Boolean(search || statusFilter || dateFrom || dateTo);
+  const filtersActive = Boolean(search || statusFilter || roleFilter || dateFrom || dateTo);
 
   return (
     <div className="tm-page">
@@ -477,7 +500,7 @@ export default function TaskManagement({ mteamSession }) {
           <span className="tm-title-icon"><TasksIcon size={23} /></span>
           <div>
             <h1>Task Management</h1>
-            <p>Create and track tasks sent to the company admin.</p>
+            <p>Create tasks and assign them to the correct admin-panel role.</p>
           </div>
         </div>
         <div className="tm-header-actions">
@@ -494,6 +517,7 @@ export default function TaskManagement({ mteamSession }) {
         {[
           ["Total Tasks", tasks.length, "tm-total"],
           ["Initiated", tasks.filter((task) => task.status === "Initiated").length, "tm-blue"],
+          ["Working", tasks.filter((task) => task.status === "Working").length, "tm-violet"],
           ["Pending", tasks.filter((task) => task.status === "Pending").length, "tm-amber"],
           ["Completed", tasks.filter((task) => task.status === "Completed").length, "tm-green"],
         ].map(([label, value, className]) => (
@@ -510,13 +534,17 @@ export default function TaskManagement({ mteamSession }) {
             <SearchIcon />
             <input
               value={search}
-              placeholder="Search task, description or company…"
+              placeholder="Search task, company or role…"
               onChange={(event) => setFilter(setSearch, event.target.value)}
             />
           </label>
           <select value={statusFilter} aria-label="Filter by status" onChange={(event) => setFilter(setStatusFilter, event.target.value)}>
             <option value="">All Statuses</option>
             {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+          </select>
+          <select value={roleFilter} aria-label="Filter by assigned role" onChange={(event) => setFilter(setRoleFilter, event.target.value)}>
+            <option value="">All Roles</option>
+            {TASK_ROLE_OPTIONS.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}
           </select>
           <label className="tm-date-filter">
             <span>From</span>
@@ -566,6 +594,7 @@ export default function TaskManagement({ mteamSession }) {
                     <th className="tm-check-cell"><input type="checkbox" checked={pageSelected} onChange={togglePage} aria-label="Select all tasks on this page" /></th>
                     <th>Task</th>
                     <th>Company</th>
+                    <th>Assigned Role</th>
                     <th>Task Date</th>
                     <th>Status</th>
                     <th>Updated</th>
@@ -583,6 +612,7 @@ export default function TaskManagement({ mteamSession }) {
                           <p className="tm-description" title={task.description}>{task.description || "—"}</p>
                         </td>
                         <td>{task.companyName ? <span className="tm-company">{task.companyName}</span> : <span className="tm-muted">Not specified</span>}</td>
+                        <td><span className="tm-role-badge">{getTaskRoleLabel(task.assignedRoleKey || task.assignedRole)}</span></td>
                         <td className="tm-nowrap">{formatDate(task.taskDate)}</td>
                         <td>
                           <select
@@ -623,11 +653,12 @@ export default function TaskManagement({ mteamSession }) {
                         <h3>{task.name || "Untitled task"}</h3>
                         <span>{formatDate(task.taskDate)}</span>
                       </div>
-                      <span className="tm-admin-badge">Admin</span>
+                      <span className="tm-admin-badge">{getTaskRoleLabel(task.assignedRoleKey || task.assignedRole)}</span>
                     </div>
                     <p className="tm-mobile-desc">{task.description || "—"}</p>
                     <div className="tm-mobile-meta">
                       <span><b>Company:</b> {task.companyName || "Not specified"}</span>
+                      <span><b>Assigned Role:</b> {getTaskRoleLabel(task.assignedRoleKey || task.assignedRole)}</span>
                       <span><b>Updated:</b> {formatDate(task.updatedAt || task.createdAt)}</span>
                     </div>
                     <div className="tm-mobile-actions">
@@ -689,18 +720,19 @@ export default function TaskManagement({ mteamSession }) {
         .tm-btn-secondary { color:var(--p-text-2); background:var(--p-card); border-color:var(--p-border); }
         .tm-btn-secondary:hover:not(:disabled) { border-color:#6366f170; color:#6366f1; }
         .tm-btn-danger { color:#dc2626; background:#ef444412; border-color:#ef444435; min-height:36px; }
-        .tm-stat-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:14px; }
+        .tm-stat-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; margin-bottom:14px; }
         .tm-stat-card { position:relative; overflow:hidden; padding:16px 18px; border-radius:15px; background:var(--p-card); border:1px solid var(--p-border); }
         .tm-stat-card::after { content:""; position:absolute; width:70px; height:70px; border-radius:50%; right:-25px; bottom:-35px; background:currentColor; opacity:.07; }
         .tm-stat-card span { display:block; color:var(--p-text-3); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
         .tm-stat-card strong { display:block; margin-top:5px; font-size:27px; line-height:1; }
         .tm-stat-card.tm-total { color:var(--p-text); }
         .tm-stat-card.tm-blue { color:#0284c7; }
+        .tm-stat-card.tm-violet { color:#7c3aed; }
         .tm-stat-card.tm-amber { color:#d97706; }
         .tm-stat-card.tm-green { color:#059669; }
         .tm-filter-card, .tm-list-card { border-radius:16px; background:var(--p-card); border:1px solid var(--p-border); box-shadow:0 3px 14px rgba(15,23,42,.025); }
         .tm-filter-card { padding:14px; margin-bottom:14px; }
-        .tm-filters { display:grid; grid-template-columns:minmax(240px,1fr) 155px minmax(145px,170px) minmax(145px,170px) auto; gap:10px; align-items:stretch; }
+        .tm-filters { display:grid; grid-template-columns:minmax(220px,1fr) 145px 170px minmax(145px,165px) minmax(145px,165px) auto; gap:10px; align-items:stretch; }
         .tm-search { position:relative; display:flex; align-items:center; }
         .tm-search svg { position:absolute; left:12px; color:var(--p-text-4); pointer-events:none; }
         .tm-search input { padding-left:37px !important; width:100%; }
@@ -720,7 +752,7 @@ export default function TaskManagement({ mteamSession }) {
         .tm-feedback button { border:0; background:transparent; color:inherit; font-size:20px; cursor:pointer; line-height:1; }
         .tm-list-card { overflow:hidden; }
         .tm-table-wrap { overflow-x:auto; }
-        .tm-table { width:100%; border-collapse:collapse; min-width:1040px; font-size:12px; }
+        .tm-table { width:100%; border-collapse:collapse; min-width:1160px; font-size:12px; }
         .tm-table th { padding:11px 12px; text-align:left; color:var(--p-text-3); background:var(--p-card2); border-bottom:1px solid var(--p-border); text-transform:uppercase; letter-spacing:.045em; font-size:10px; white-space:nowrap; }
         .tm-table td { padding:13px 12px; border-bottom:1px solid var(--p-border-s); vertical-align:middle; color:var(--p-text-2); }
         .tm-table tbody tr:hover { background:#6366f108; }
@@ -730,11 +762,13 @@ export default function TaskManagement({ mteamSession }) {
         .tm-task-name { display:block; max-width:300px; color:var(--p-text); font-size:13px; }
         .tm-description { max-width:330px; margin:4px 0 0; color:var(--p-text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .tm-company { display:inline-block; max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:4px 8px; border-radius:7px; color:#4f46e5; background:#6366f110; font-weight:600; }
+        .tm-role-badge { display:inline-block; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:4px 8px; border-radius:7px; color:#6d28d9; background:#8b5cf615; border:1px solid #8b5cf630; font-weight:700; }
         .tm-muted { color:var(--p-text-4); font-style:italic; }
         .tm-nowrap { white-space:nowrap; }
         .tm-updated-by { display:block; max-width:130px; margin-top:3px; color:var(--p-text-4); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .tm-status-select { min-width:108px; height:31px; border-radius:999px; padding:0 9px; outline:none; font-size:11px; font-weight:700; cursor:pointer; }
         .tm-status-initiated { color:#0369a1; background:#0ea5e915; border:1px solid #0ea5e940; }
+        .tm-status-working { color:#6d28d9; background:#8b5cf615; border:1px solid #8b5cf645; }
         .tm-status-pending { color:#b45309; background:#f59e0b15; border:1px solid #f59e0b45; }
         .tm-status-completed { color:#047857; background:#10b98115; border:1px solid #10b98145; }
         .tm-actions-head { text-align:center !important; }
@@ -776,8 +810,9 @@ export default function TaskManagement({ mteamSession }) {
         .tm-form-error { margin:0 0 12px; padding:9px 11px; border-radius:9px; color:#dc2626; background:#ef444410; font-size:11px; }
         .tm-modal-actions { display:flex; justify-content:flex-end; gap:9px; padding-top:4px; }
         @media (max-width:1050px) {
-          .tm-filters { grid-template-columns:1fr 150px 1fr 1fr; }
-          .tm-clear { grid-column:4; justify-self:end; min-height:28px; }
+          .tm-stat-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+          .tm-filters { grid-template-columns:1fr 150px 175px; }
+          .tm-clear { grid-column:3; justify-self:end; min-height:28px; }
           .tm-list-footer { grid-template-columns:auto 1fr; }
           .tm-page-summary { text-align:right; }
           .tm-pagination { grid-column:1/-1; justify-content:center; }
@@ -804,7 +839,7 @@ export default function TaskManagement({ mteamSession }) {
           .tm-mobile-card-head { display:grid; grid-template-columns:auto 1fr auto; align-items:flex-start; gap:9px; }
           .tm-mobile-card-head h3 { margin:0; color:var(--p-text); font-size:13px; line-height:1.35; }
           .tm-mobile-card-head div > span { display:block; margin-top:3px; color:var(--p-text-4); font-size:10px; }
-          .tm-admin-badge { padding:3px 7px; border-radius:6px; color:#4f46e5; background:#6366f112; font-size:9px; font-weight:800; text-transform:uppercase; }
+          .tm-admin-badge { max-width:105px; padding:4px 7px; border-radius:6px; color:#4f46e5; background:#6366f112; font-size:9px; line-height:1.2; text-align:center; font-weight:800; text-transform:uppercase; }
           .tm-mobile-desc { margin:11px 0; padding:10px; border-radius:9px; background:var(--p-card); color:var(--p-text-2); font-size:11px; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; }
           .tm-mobile-meta { display:flex; flex-direction:column; gap:4px; color:var(--p-text-3); font-size:10px; }
           .tm-mobile-meta b { color:var(--p-text-2); }
