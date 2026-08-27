@@ -418,6 +418,13 @@ export default function MarketingDashboard({ mteamSession } = {}) {
             <p style={{ margin:"4px 0 0", fontSize:13, color:"var(--p-text-3)" }}>
               {mteamDoc?.name ?? mlmUser?.name}&nbsp;·&nbsp;{mteamDoc?.mobile ?? mlmUser?.mobileNo}
             </p>
+            {(mteamSession?.parentName || mteamDoc?.parentName) && (
+              <p style={{ margin:"8px 0 0", display:"inline-flex", flexWrap:"wrap", gap:6, padding:"6px 10px", borderRadius:9, background:"#6366f112", border:"1px solid #6366f130", fontSize:12, color:"var(--p-text-2)" }}>
+                <b>Team of {mteamSession?.parentName || mteamDoc?.parentName}</b>
+                <span>· Assigned commission {commPct}%</span>
+                <span>· Parent bonus {mteamDoc?.uplineBonusPercentage ?? mteamSession?.uplineBonusPercentage ?? 10}% of your commission</span>
+              </p>
+            )}
           </div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:20, border:`1px solid ${mteamDoc?.active ? "#10b98155" : "#ef444455"}`, fontSize:12, fontWeight:700, color: mteamDoc?.active ? "#10b981" : "#ef4444" }}>

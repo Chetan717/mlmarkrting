@@ -1,4 +1,10 @@
-# React + Vite
+# MLM LIVE Marketing Portal
+
+This release replaces Marketing mobile/SMS OTP with registered-email OTP, supports Admin-assigned multi-level Marketing members, adds the read-only My Team portal, and keeps each member's dashboard scoped to its own coupon/users/commission.
+
+Read `SECURITY_DEPLOY.md`, `MARKETING_EMAIL_HIERARCHY_DEPLOY.md` and `MARKETING_HIERARCHY_RULES_UPDATE.md` before production deployment. The Admin data migration must be completed before this email-only frontend is released.
+
+## Frontend
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

@@ -14,13 +14,22 @@ export function MarketingAuthProvider({ children }) {
     try {
     const token = await user.getIdTokenResult();
     if (token.claims.panel !== "marketing") throw new Error("wrong panel");
-    await httpsCallable(functions, "marketingSessionStatus")({});
+    const statusResult = await httpsCallable(functions, "marketingSessionStatus")({});
+    const account = statusResult.data?.account || {};
     const next = {
       uid: user.uid, role: token.claims.actorType === "owner" ? "member" : "subuser",
       mteamId: token.claims.mteamId, subUserId: token.claims.subUserId || null,
       name: token.claims.name || "Member", mobile: token.claims.mobile || "",
       parentMobile: token.claims.parentMobile || "",
       tabs: Array.isArray(token.claims.tabs) ? token.claims.tabs : [],
+      marketingMemberName: account.name || token.claims.name || "Member",
+      loginEmailMasked: account.loginEmailMasked || "",
+      parentMteamId: account.parentMteamId || "",
+      parentName: account.parentName || "",
+      commissionPercentage: Number(account.commissionPercentage || 0),
+      uplineBonusPercentage: Number(account.uplineBonusPercentage || 0),
+      couponCode: account.couponCode || "",
+      referCode: account.referCode || "",
     };
     saveSession(next); setSession(next); setLoading(false);
     } catch (_) { clearSession(); setSession(null); setUnlocked(false); await signOut(auth).catch(()=>null); setLoading(false); }

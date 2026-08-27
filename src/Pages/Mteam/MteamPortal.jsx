@@ -13,6 +13,7 @@ import { db } from "../../../Firebase";
 import { useMarketingAuth } from "../../Auth/MarketingAuthContext";
 import MainTeam from "./MainTeam";
 import TeamUserManagement from "./TeamUserManagement";
+import MyMarketingTeam from "./MyMarketingTeam";
 import MonthWiseReport from "./MonthWiseReport";
 import LeadManagement from "./LeadManagement";
 import FreshLead from "./FreshLead";
@@ -249,6 +250,7 @@ const ALL_TABS = [
   },
   { id: "taskmanagement", label: "Task Management", shortLabel: "Tasks", icon: IcTasks },
   { id: "team", label: "My Team", shortLabel: "Team", icon: IcTeam },
+  { id: "portalusers", label: "Portal Users", shortLabel: "Users", icon: IcTeam },
 ];
 
 export default function MteamPortal() {
@@ -356,7 +358,7 @@ export default function MteamPortal() {
     : (session.parentMobile ?? session.mobile);
 
   const allowedTabs = ALL_TABS.filter((t) => {
-    if (t.id === "team") return isMember;
+    if (t.id === "team" || t.id === "portalusers") return isMember;
     if (isMember) return true;
     return (session.tabs ?? ["dashboard"]).includes(t.id);
   });
@@ -429,6 +431,8 @@ export default function MteamPortal() {
     if (activeTab === "freshleads") return <FreshLead mteamSession={session} />;
     if (activeTab === "taskmanagement") return <TaskManagement mteamSession={session} />;
     if (activeTab === "team" && isMember)
+      return <MyMarketingTeam />;
+    if (activeTab === "portalusers" && isMember)
       return <TeamUserManagement mteamId={session.mteamId} />;
     return (
       <div

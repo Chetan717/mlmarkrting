@@ -94,12 +94,16 @@ export default function MonthWiseReport({ mteamId, mobile }) {
       setLoading(true);
       setError(null);
       try {
-        const mteamSnap = await getDocs(
-          query(collection(db, "mteam"), where("mobile", "==", mobile))
-        );
-        if (mteamSnap.empty) throw new Error("Marketing member not found.");
-
-        const mt = { id: mteamSnap.docs[0].id, ...mteamSnap.docs[0].data() };
+        let mt = null;
+        if (mteamId) {
+          const memberSnapshot = await getDoc(doc(db, "mteam", mteamId));
+          if (memberSnapshot.exists()) mt = { id: memberSnapshot.id, ...memberSnapshot.data() };
+        }
+        if (!mt) {
+          const mteamSnap = await getDocs(query(collection(db, "mteam"), where("mobile", "==", mobile)));
+          if (!mteamSnap.empty) mt = { id: mteamSnap.docs[0].id, ...mteamSnap.docs[0].data() };
+        }
+        if (!mt) throw new Error("Marketing member not found.");
 
         let couponDoc = null;
         try {
