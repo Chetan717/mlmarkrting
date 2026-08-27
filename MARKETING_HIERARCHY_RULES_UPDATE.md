@@ -1,6 +1,6 @@
 # Firestore rules update for Marketing hierarchy
 
-Hierarchy, Marketing login emails, percentages and coupons are written only by trusted Admin Cloud Functions. Parent-team reporting is also returned by trusted Marketing callables as a sanitized, read-only response. Do not grant a Marketing client direct access to another `mteam` member's users.
+Hierarchy, Marketing login emails, percentages and coupons are written only by trusted Admin Cloud Functions. Parent-team reporting is also returned by trusted Marketing callables as a sanitized, read-only response. Do not grant a Marketing client direct access to another `mteam` member's users.klklbklbbkl
 
 Merge the following intent into the existing production rules instead of replacing unrelated rules. Adapt helper names if the current rules use different names.
 
