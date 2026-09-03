@@ -14,12 +14,13 @@ test("team bonus uses the child commission as its base", () => {
 test("sanitized team lead never contains mobile or password fields", () => {
   const lead = buildSanitizedLead({
     opaqueId: "opaque", couponCode: "ABC123",
-    user: { name: "User", mobileNo: "9876543210", password: "secret", createdAt: new Date("2026-01-01") },
+    user: { name: "User", mobileNo: "9876543210", password: "secret", createdAt: new Date("2026-01-01"), lastDownloadAt: new Date("2026-02-02T03:04:00Z") },
     subscription: { mobileNo: "9876543210", plan: "Gold", Active: true, Expire: false },
     profile: { mobile: "9876543210", companyName: "Example" },
   });
   assert.equal(lead.name, "User");
   assert.equal(lead.planStatus, "Active");
+  assert.equal(lead.lastDownloadAt, Date.parse("2026-02-02T03:04:00Z"));
   for (const field of ["mobile", "mobileNo", "phone", "password", "pin"]) assert.equal(Object.hasOwn(lead, field), false);
 });
 

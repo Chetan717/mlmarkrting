@@ -9,6 +9,7 @@ import {
   calculateMlmProfileStats,
   fetchMlmProfiles,
 } from "../../Utils/mlmProfile";
+import { formatLastDownload } from "../../Utils/lastDownload";
 
 // ── Date helper ──────────────────────────────────────────────
 const MONTHS_MAP = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
@@ -588,8 +589,8 @@ export default function MarketingDashboard({ mteamSession } = {}) {
             <table style={{ width:"100%", borderCollapse:"collapse", minWidth:720 }}>
               <thead>
                 <tr style={{ background:"var(--p-card2)" }}>
-                  {["#","Name / Mobile","Plan","Status","Amount","Commission","Purchase Date","Action"].map((h,i) => (
-                    <th key={h} style={{ padding:"11px 14px", fontSize:11, fontWeight:700, color:"var(--p-text-4)", textTransform:"uppercase", letterSpacing:"0.06em", textAlign: i>=4 && i<=6 ? "right" : i===7 ? "center" : "left", borderBottom:"2px solid var(--p-border)", whiteSpace:"nowrap" }}>{h}</th>
+                  {["#","Name / Mobile","Plan","Status","Amount","Commission","Purchase Date","Last Download","Action"].map((h,i) => (
+                    <th key={h} style={{ padding:"11px 14px", fontSize:11, fontWeight:700, color:"var(--p-text-4)", textTransform:"uppercase", letterSpacing:"0.06em", textAlign: i>=4 && i<=6 ? "right" : i===8 ? "center" : "left", borderBottom:"2px solid var(--p-border)", whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -625,6 +626,7 @@ export default function MarketingDashboard({ mteamSession } = {}) {
                       <td style={{ padding:"11px 14px", textAlign:"right", fontWeight:700, fontSize:13, color:"var(--p-text)" }}>{fmtINR(sub.PaymentAmount)}</td>
                       <td style={{ padding:"11px 14px", textAlign:"right", fontWeight:700, fontSize:13, color:"#10b981" }}>+{fmtINR(commission)}</td>
                       <td style={{ padding:"11px 14px", textAlign:"right", fontSize:12, color:"var(--p-text-3)" }}>{date}</td>
+                      <td style={{ padding:"11px 14px", fontSize:12, color:user?.lastDownloadAt ? "#10b981" : "var(--p-text-4)", fontWeight:user?.lastDownloadAt ? 700 : 500, whiteSpace:"nowrap" }}>{formatLastDownload(user?.lastDownloadAt)}</td>
                       <td style={{ padding:"11px 14px", textAlign:"center" }}>
                         <button
                           onClick={() => { setSelectedSub(sub); setModalOpen(true); }}
@@ -684,6 +686,7 @@ export default function MarketingDashboard({ mteamSession } = {}) {
                   ["Duration",    sub.duration ?? "—"],
                   ["Coupon Used", sub.couponApplied ?? "—"],
                   ["Order ID",    sub.OrderId ?? "—"],
+                  ["Last Download", formatLastDownload(user?.lastDownloadAt)],
                 ].map(([k,v]) => (
                   <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"9px 0", borderBottom:"1px solid var(--p-border)" }}>
                     <span style={{ fontSize:12, color:"var(--p-text-4)", fontWeight:600 }}>{k}</span>

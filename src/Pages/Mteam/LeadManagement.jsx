@@ -11,6 +11,7 @@ import {
   getMlmProfileByMobile,
   indexMlmProfiles,
 } from "../../Utils/mlmProfile";
+import { formatLastDownload } from "../../Utils/lastDownload";
 import { getSession } from "../../Utils/sessionManager";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -351,6 +352,7 @@ function ViewModal({ lead, onClose, onFollowup }) {
           <Row label="Referred By" value={user.referredBy} />
           <Row label="Verified" value={user.isverified ? "Yes" : "No"} />
           <Row label="Joined" value={user.createdAt?.toDate ? user.createdAt.toDate().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : (user.createdAt ?? "—")} />
+          <Row label="Last Download" value={formatLastDownload(user.lastDownloadAt)} />
 
           {subscription && (
             <>
@@ -981,7 +983,7 @@ export default function LeadManagement({ mteamSession }) {
             <>
               {/* Desktop table */}
               <div className="leads-table-wrap" style={{ overflowX: "auto", borderRadius: 14, border: "1px solid var(--p-border)", marginBottom: 16 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1240 }}>
                   <thead>
                     <tr style={{ background: "var(--p-card2)" }}>
                       <th style={th()}>
@@ -991,6 +993,7 @@ export default function LeadManagement({ mteamSession }) {
                       </th>
                       <th style={th()}>User</th>
                       <th style={th()}>Joined</th>
+                      <th style={th()}>Last Download</th>
                       <th style={th()}>Mobile</th>
                       <th style={th()}>Password</th>
                       <th style={th()}>MLM Profile</th>
@@ -1040,6 +1043,11 @@ export default function LeadManagement({ mteamSession }) {
                                 : user.createdAt
                                   ? new Date(user.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
                                   : "—"}
+                            </span>
+                          </td>
+                          <td style={td()}>
+                            <span style={{ fontSize: 12, color: user.lastDownloadAt ? "#10b981" : "var(--p-text-4)", whiteSpace: "nowrap", fontWeight: user.lastDownloadAt ? 700 : 500 }}>
+                              {formatLastDownload(user.lastDownloadAt)}
                             </span>
                           </td>
                           <td style={td()}>
@@ -1176,6 +1184,9 @@ export default function LeadManagement({ mteamSession }) {
                             : user.createdAt
                               ? new Date(user.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
                               : "—"}
+                        </span>
+                        <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700, background: user.lastDownloadAt ? "#10b98115" : "var(--p-card2)", color: user.lastDownloadAt ? "#10b981" : "var(--p-text-4)", border: `1px solid ${user.lastDownloadAt ? "#10b98130" : "var(--p-border)"}` }}>
+                          ⬇ Last: {formatLastDownload(user.lastDownloadAt)}
                         </span>
                       </div>
 
