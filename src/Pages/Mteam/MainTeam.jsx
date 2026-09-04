@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import {
-  collection, query, where, getDocs, doc, getDoc,
+  collection, query, where, getDocs, doc, getDoc, limit,
 } from "firebase/firestore";
 import { db, functions } from "../../../Firebase";
 import { httpsCallable } from "firebase/functions";
@@ -231,7 +231,7 @@ export default function MarketingDashboard({ mteamSession } = {}) {
           mt = { documentId: snap.id, ...snap.data() };
         } else {
           const mteamSnap = await getDocs(
-            query(collection(db, COLL.MTEAM), where("mobile", "==", mlmUser.mobileNo))
+            query(collection(db, COLL.MTEAM), where("mobile", "==", mlmUser.mobileNo), limit(1))
           );
           if (mteamSnap.empty) throw new Error("No marketing team record found.");
           mt = { documentId: mteamSnap.docs[0].id, ...mteamSnap.docs[0].data() };
@@ -248,7 +248,7 @@ export default function MarketingDashboard({ mteamSession } = {}) {
         }
         if (!coupon) {
           const cSnap = await getDocs(
-            query(collection(db, COLL.COUPONCODE), where("assigned_user.id", "==", mt.documentId))
+            query(collection(db, COLL.COUPONCODE), where("assigned_user.id", "==", mt.documentId), limit(1))
           );
           if (!cSnap.empty) coupon = { documentId: cSnap.docs[0].id, ...cSnap.docs[0].data() };
         }
@@ -265,24 +265,30 @@ export default function MarketingDashboard({ mteamSession } = {}) {
             where("payment", "==", "Success")
           )
         );
-        const subs = await Promise.all(
-          subSnap.docs.map(async (d) => {
-            const sub = { documentId: d.id, ...d.data() };
-            try {
-              const uSnap = await getDocs(
-                query(collection(db, COLL.USERS), where("referredByMteam", "==", mt.documentId), where("mobileNo", "==", sub.mobileNo))
-              );
-              if (!uSnap.empty) sub._user = { documentId: uSnap.docs[0].id, ...uSnap.docs[0].data() };
-            } catch (_) {}
-            return sub;
-          })
-        );
-        setSubscribers(subs);
-
-        // D: ALL users referred by this mteam member
+        // D: ALL users referred by this mteam member. This snapshot is needed
+        // by the dashboard anyway, so reuse it to attach users to subscriptions
+        // instead of issuing one extra Firestore query per subscription.
         const refSnap = await getDocs(
           query(collection(db, COLL.USERS), where("referredByMteam", "==", mt.documentId))
         );
+        const firstUserDocByMobile = new Map();
+        for (const userDoc of refSnap.docs) {
+          const mobileNo = userDoc.data()?.mobileNo;
+          if (mobileNo && !firstUserDocByMobile.has(mobileNo)) {
+            firstUserDocByMobile.set(mobileNo, userDoc);
+          }
+        }
+
+        const subs = subSnap.docs.map((d) => {
+          const sub = { documentId: d.id, ...d.data() };
+          const userDoc = firstUserDocByMobile.get(sub.mobileNo);
+          if (userDoc) {
+            sub._user = { documentId: userDoc.id, ...userDoc.data() };
+          }
+          return sub;
+        });
+        setSubscribers(subs);
+
         const referred = refSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         setReferredUsers(referred);
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   collection, getDocs, query, where, doc, setDoc,
-  serverTimestamp, Timestamp, orderBy,
+  serverTimestamp, Timestamp, orderBy, limit,
 } from "firebase/firestore";
 import { db, functions } from "../../../Firebase";
 import { httpsCallable } from "firebase/functions";
@@ -411,7 +411,7 @@ export default function LeadManagement({ mteamSession }) {
   const mteamId = session?.mteamId;
 
   const [mteamDoc, setMteamDoc] = useState(null);
-  const [couponCode, setCouponCode] = useState(null);
+  const [couponCode, setCouponCode] = useState(() => session?.couponCode || null);
   const [leads, setLeads] = useState([]);
   const [followups, setFollowups] = useState({});
   const [loading, setLoading] = useState(false);
@@ -441,24 +441,32 @@ export default function LeadManagement({ mteamSession }) {
     if (!mteamId) return;
     (async () => {
       try {
-        const { getDoc, doc: firestoreDoc } = await import("firebase/firestore");
-        const snap = await getDoc(firestoreDoc(db, COLL.MTEAM, mteamId));
-        if (!snap.exists()) throw new Error("Team record not found.");
-        const mt = { id: snap.id, ...snap.data() };
-        setMteamDoc(mt);
+        // The authenticated Marketing session already contains the assigned
+        // coupon code. Reuse it on normal production sessions so opening Lead
+        // Management does not reread mteam + couponcode. Keep the original
+        // Firestore path as a fallback for legacy sessions.
+        if (session?.couponCode) {
+          setCouponCode(session.couponCode);
+        } else {
+          const { getDoc, doc: firestoreDoc } = await import("firebase/firestore");
+          const snap = await getDoc(firestoreDoc(db, COLL.MTEAM, mteamId));
+          if (!snap.exists()) throw new Error("Team record not found.");
+          const mt = { id: snap.id, ...snap.data() };
+          setMteamDoc(mt);
 
-        let coupon = null;
-        if (mt.assign_coupon_id) {
-          const cs = await getDoc(firestoreDoc(db, COLL.COUPONCODE, mt.assign_coupon_id));
-          if (cs.exists()) coupon = { id: cs.id, ...cs.data() };
+          let coupon = null;
+          if (mt.assign_coupon_id) {
+            const cs = await getDoc(firestoreDoc(db, COLL.COUPONCODE, mt.assign_coupon_id));
+            if (cs.exists()) coupon = { id: cs.id, ...cs.data() };
+          }
+          if (!coupon) {
+            const cSnap = await getDocs(
+              query(collection(db, COLL.COUPONCODE), where("assigned_user.id", "==", mt.id), limit(1))
+            );
+            if (!cSnap.empty) coupon = { id: cSnap.docs[0].id, ...cSnap.docs[0].data() };
+          }
+          if (coupon) setCouponCode(coupon.code);
         }
-        if (!coupon) {
-          const cSnap = await getDocs(
-            query(collection(db, COLL.COUPONCODE), where("assigned_user.id", "==", mt.id))
-          );
-          if (!cSnap.empty) coupon = { id: cSnap.docs[0].id, ...cSnap.docs[0].data() };
-        }
-        if (coupon) setCouponCode(coupon.code);
 
         // Fetch active & launched MLM companies from mlmcomp collection
         try {
@@ -482,7 +490,7 @@ export default function LeadManagement({ mteamSession }) {
         setInitLoading(false);
       }
     })();
-  }, [mteamId]);
+  }, [mteamId, session?.couponCode]);
 
   // ── fetch leads ──────────────────────────────────────────────────────────
   const fetchLeads = useCallback(async () => {

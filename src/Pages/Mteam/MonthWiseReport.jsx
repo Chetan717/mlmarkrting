@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc, limit } from "firebase/firestore";
 import { db } from "../../../Firebase";
 import Paginator from "./Paginator";
 
@@ -73,7 +73,7 @@ const statusBadge = (sub) => {
   return { label: "Inactive", color: "#f59e0b", bg: "#f59e0b15" };
 };
 
-export default function MonthWiseReport({ mteamId, mobile }) {
+export default function MonthWiseReport({ mteamId, mobile, sessionCouponCode = "", sessionCommissionPercentage = null }) {
   const [subscribers, setSubscribers] = useState([]);
   const [coupon, setCoupon] = useState(null);
   const [commPct, setCommPct] = useState(0);
@@ -94,34 +94,51 @@ export default function MonthWiseReport({ mteamId, mobile }) {
       setLoading(true);
       setError(null);
       try {
-        let mt = null;
-        if (mteamId) {
-          const memberSnapshot = await getDoc(doc(db, "mteam", mteamId));
-          if (memberSnapshot.exists()) mt = { id: memberSnapshot.id, ...memberSnapshot.data() };
-        }
-        if (!mt) {
-          const mteamSnap = await getDocs(query(collection(db, "mteam"), where("mobile", "==", mobile)));
-          if (!mteamSnap.empty) mt = { id: mteamSnap.docs[0].id, ...mteamSnap.docs[0].data() };
-        }
-        if (!mt) throw new Error("Marketing member not found.");
-
         let couponDoc = null;
-        try {
-          const snap = await getDoc(doc(db, "couponcode", mt.assign_coupon_id));
-          if (snap.exists()) couponDoc = { id: snap.id, ...snap.data() };
-        } catch (_) {}
 
-        if (!couponDoc) {
-          const cSnap = await getDocs(
-            query(collection(db, "couponcode"), where("assigned_user.id", "==", mt.id))
-          );
-          if (!cSnap.empty) couponDoc = { id: cSnap.docs[0].id, ...cSnap.docs[0].data() };
+        // Normal secure sessions already contain both values. Reusing them
+        // avoids re-reading mteam + coupon every time the Reports tab mounts.
+        // Keep the original Firestore lookup as a backward-compatible fallback.
+        if (sessionCouponCode) {
+          couponDoc = { code: sessionCouponCode };
+          setCommPct(Number(sessionCommissionPercentage ?? 0));
+        } else {
+          let mt = null;
+          if (mteamId) {
+            const memberSnapshot = await getDoc(doc(db, "mteam", mteamId));
+            if (memberSnapshot.exists()) mt = { id: memberSnapshot.id, ...memberSnapshot.data() };
+          }
+          if (!mt) {
+            const mteamSnap = await getDocs(
+              query(collection(db, "mteam"), where("mobile", "==", mobile), limit(1))
+            );
+            if (!mteamSnap.empty) mt = { id: mteamSnap.docs[0].id, ...mteamSnap.docs[0].data() };
+          }
+          if (!mt) throw new Error("Marketing member not found.");
+
+          try {
+            if (mt.assign_coupon_id) {
+              const snap = await getDoc(doc(db, "couponcode", mt.assign_coupon_id));
+              if (snap.exists()) couponDoc = { id: snap.id, ...snap.data() };
+            }
+          } catch (_) {}
+
+          if (!couponDoc) {
+            const cSnap = await getDocs(
+              query(
+                collection(db, "couponcode"),
+                where("assigned_user.id", "==", mt.id),
+                limit(1),
+              )
+            );
+            if (!cSnap.empty) couponDoc = { id: cSnap.docs[0].id, ...cSnap.docs[0].data() };
+          }
+
+          if (!couponDoc) throw new Error("No coupon assigned to this account.");
+          setCommPct(couponDoc.marketing_member_percentage ?? 0);
         }
-
-        if (!couponDoc) throw new Error("No coupon assigned to this account.");
 
         setCoupon(couponDoc);
-        setCommPct(couponDoc.marketing_member_percentage ?? 0);
 
         const subSnap = await getDocs(
           query(
@@ -140,7 +157,7 @@ export default function MonthWiseReport({ mteamId, mobile }) {
       }
     };
     fetchData();
-  }, [mobile, mteamId]);
+  }, [mobile, mteamId, sessionCouponCode, sessionCommissionPercentage]);
 
   const filtered = useMemo(() => {
     if (!fromDate && !toDate) return subscribers;

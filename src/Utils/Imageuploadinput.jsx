@@ -96,6 +96,9 @@ export default function ImageUploadInput({
         const storageRef  = ref(storage, `${storagePath}/${genName()}`);
         const uploadTask  = uploadBytesResumable(storageRef, webpBlob, {
           contentType: "image/webp",
+          // Filenames are timestamp/random based and never overwritten.
+          // Long-lived browser/CDN caching reduces repeat Storage egress.
+          cacheControl: "public,max-age=31536000,immutable",
         });
 
         await new Promise((resolve, reject) => {

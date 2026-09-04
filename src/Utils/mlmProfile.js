@@ -1,4 +1,4 @@
-const PROFILE_LOOKUP_BATCH_SIZE = 30;
+const PROFILE_LOOKUP_BATCH_SIZE = 100;
 const VALID_MOBILE_PATTERN = /^\d{10}$/;
 
 export function normalizeMobile(value) {
@@ -76,9 +76,9 @@ export async function fetchMlmProfiles(mobiles, profileLookup) {
   const requestedMobiles = uniqueNormalizedMobiles(mobiles);
   if (requestedMobiles.length === 0) return [];
 
-  // Firestore `in` queries support at most 30 comparison values. Calling the
-  // secure profile endpoint in the same safe batch size prevents missing
-  // profiles when a marketing member has more than one query batch of users.
+  // The secure callable accepts up to 100 mobiles per request and performs
+  // Firestore's 30-value `in` batching internally. Sending up to 100 here
+  // avoids repeating session/authorization/team reads for every 30 mobiles.
   const responses = await Promise.all(
     chunk(requestedMobiles, PROFILE_LOOKUP_BATCH_SIZE)
       .map(batch => profileLookup({ mobiles: batch }))

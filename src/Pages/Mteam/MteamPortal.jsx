@@ -8,6 +8,7 @@ import {
   query,
   where,
   doc,
+  limit,
 } from "firebase/firestore";
 import { db } from "../../../Firebase";
 import { useMarketingAuth } from "../../Auth/MarketingAuthContext";
@@ -276,8 +277,16 @@ export default function MteamPortal() {
     }
     refreshSession();
 
-    // Fetch coupon code for WhatsApp share
+    // The secure session status already returns the assigned coupon code.
+    // Reuse it and only hit Firestore for legacy sessions where the value is
+    // missing. This preserves the old fallback flow while removing duplicate
+    // reads on normal portal loads.
+    if (s.couponCode) {
+      setCouponCode(normalizeReferralCode(s.couponCode));
+    }
+
     const fetchCoupon = async () => {
+      if (s.couponCode) return;
       try {
         let mteamId = s.mteamId;
         let mt = null;
@@ -287,7 +296,7 @@ export default function MteamPortal() {
         }
         if (!mt) {
           const mSnap = await getDocs(
-            query(collection(db, "mteam"), where("mobile", "==", s.mobile)),
+            query(collection(db, "mteam"), where("mobile", "==", s.mobile), limit(1)),
           );
           if (!mSnap.empty)
             mt = { id: mSnap.docs[0].id, ...mSnap.docs[0].data() };
@@ -309,6 +318,7 @@ export default function MteamPortal() {
             query(
               collection(db, "couponcode"),
               where("assigned_user.id", "==", mt.id),
+              limit(1),
             ),
           );
           if (!cSnap.empty) couponDoc = cSnap.docs[0].data();
@@ -426,7 +436,14 @@ export default function MteamPortal() {
   const renderContent = () => {
     if (activeTab === "dashboard") return <MainTeam mteamSession={session} />;
     if (activeTab === "reports")
-      return <MonthWiseReport mteamId={session.mteamId} mobile={dataMobile} />;
+      return (
+        <MonthWiseReport
+          mteamId={session.mteamId}
+          mobile={dataMobile}
+          sessionCouponCode={session.couponCode}
+          sessionCommissionPercentage={session.commissionPercentage}
+        />
+      );
     if (activeTab === "leads") return <LeadManagement mteamSession={session} />;
     if (activeTab === "freshleads") return <FreshLead mteamSession={session} />;
     if (activeTab === "taskmanagement") return <TaskManagement mteamSession={session} />;

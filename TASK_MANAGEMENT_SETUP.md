@@ -6,7 +6,7 @@ Apply `TASK_MANAGEMENT_RULES_UPDATE.md` to the project's existing Firestore rule
 
 Marketing owners always have access. Marketing sub-users need the `taskmanagement` tab and can only query tasks belonging to their own `mteamId`. Master Admin can see all tasks. Other admin-panel users need the `taskmanagement` tab and only receive tasks assigned to their role.
 
-## Task document fields hjvjhjh
+## Task document fields
 
 - `name`, `taskDate`, `description`, `companyName`, `status`
 - `assignedRole`, `assignedRoleKey`
