@@ -34,6 +34,7 @@ const mobile10 = value => {
   const digits = String(value || "").replace(/\D/g, "");
   return digits.length > 10 ? digits.slice(-10) : digits;
 };
+
 const hash = value => crypto.createHash("sha256").update(String(value)).digest("hex");
 const cleanText = (value, max = 120) => String(value || "").replace(/[<>]/g, "").trim().slice(0, max);
 const safeTabs = value => Array.isArray(value) ? [...new Set(value.filter(tab => ALL_TABS.includes(tab)))].slice(0, 20) : [];
@@ -383,12 +384,21 @@ exports.marketingPanelLogout = onCall({ region: REGION, cors: true }, async requ
 
 exports.marketingGetProfiles = onCall({ region: REGION, cors: true }, async request => {
   const { owner } = await sessionFor(request);
-  const requested = [...new Set((request.data?.mobiles || []).map(mobile10).filter(mobile => /^\d{10}$/.test(mobile)))].slice(0, 100);
+  const requested = [...new Set(
+    (request.data?.mobiles || []).map(mobile10).filter(mobile => /^\d{10}$/.test(mobile)),
+  )].slice(0, 5000);
+  if (requested.length === 0) return { profiles: [] };
+
+  // Read the referred-user authorization set once per large request. The client
+  // batches up to 5,000 mobiles now, so a normal dashboard no longer repeats
+  // this full scan for every 100 users.
   const users = await db.collection("users").where("referredByMteam", "==", owner.id).get();
   const allowed = new Set(users.docs.map(document => mobile10(document.data().mobileNo)));
-  const mobiles = requested.filter(mobile => allowed.has(mobile)), profiles = [];
+  const mobiles = requested.filter(mobile => allowed.has(mobile));
+  const profiles = [];
   for (let index = 0; index < mobiles.length; index += 30) {
-    const snapshot = await db.collection("mlmprofiles").where("mobile", "in", mobiles.slice(index, index + 30)).get();
+    const snapshot = await db.collection("mlmprofiles")
+      .where("mobile", "in", mobiles.slice(index, index + 30)).get();
     for (const document of snapshot.docs) profiles.push({ id: document.id, ...document.data() });
   }
   return { profiles };

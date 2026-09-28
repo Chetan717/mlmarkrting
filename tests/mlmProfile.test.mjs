@@ -51,7 +51,7 @@ test("all profile displays resolve through the normalized mobile index", () => {
   assert.equal(getMlmProfileByMobile(byMobile, "9000000000"), null);
 });
 
-test("profile lookup uses the callable 100-mobile limit without losing results", async () => {
+test("profile lookup uses one large callable batch without losing results", async () => {
   const calls = [];
   const mobiles = Array.from(
     { length: 65 },
@@ -73,10 +73,10 @@ test("profile lookup uses the callable 100-mobile limit without losing results",
 });
 
 
-test("profile lookup splits requests larger than the callable 100-mobile limit", async () => {
+test("profile lookup splits requests larger than the callable 5000-mobile limit", async () => {
   const calls = [];
   const mobiles = Array.from(
-    { length: 205 },
+    { length: 5005 },
     (_, index) => String(7000000000 + index)
   );
 
@@ -89,6 +89,6 @@ test("profile lookup splits requests larger than the callable 100-mobile limit",
     };
   });
 
-  assert.deepEqual(calls.map(batch => batch.length), [100, 100, 5]);
-  assert.equal(profiles.length, 205);
+  assert.deepEqual(calls.map(batch => batch.length), [5000, 5]);
+  assert.equal(profiles.length, 5005);
 });
