@@ -13,7 +13,7 @@ export function MarketingAuthProvider({ children }) {
     if (!user) { clearSession(); setSession(null); setUnlocked(false); setLoading(false); return; }
     try {
     const token = await user.getIdTokenResult();
-    if (token.claims.panel !== "marketing") throw new Error("wrong panel");
+    if (token.claims.panel !== "marketing") { clearSession(); setSession(null); setUnlocked(false); setLoading(false); return; }
     const statusResult = await httpsCallable(functions, "marketingSessionStatus")({});
     const account = statusResult.data?.account || {};
     const next = {

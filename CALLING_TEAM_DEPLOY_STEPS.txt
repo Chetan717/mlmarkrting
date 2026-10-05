@@ -1,0 +1,31 @@
+CALLING TEAM — SAFE DEPLOY ORDER
+================================
+
+IMPORTANT
+- Existing MLMLIVE authSignupInit/authSignupVerify functions are NOT changed.
+- MLMLIVE keeps calling those auth functions in us-central1.
+- Calling Team / Marketing functions stay in asia-south1.
+
+1) From the Marketing project folder, deploy Firestore indexes:
+
+   firebase deploy --only firestore:indexes
+
+2) Deploy only the Calling Team related Functions (this avoids redeploying unrelated functions):
+
+   firebase deploy --only functions:marketingCreateCallingMember,functions:marketingListCallingTeam,functions:marketingUpdateCallingMember,functions:marketingSetCallingMemberActive,functions:marketingResetCallingMemberPassword,functions:marketingGetCallingMemberAnalysis,functions:resolveCallingTeamCode,functions:claimCallingTeamAttribution,functions:callingStartTwoFactorOtp,functions:callingVerifyTwoFactorOtp,functions:callingCreateSessionFromTwoFactor,functions:callingSessionStatus,functions:callingUnlockSession,functions:callingPanelLogout,functions:callingGetDashboard,functions:callingSaveFollowup
+
+3) Deploy the Marketing frontend using your existing production process.
+
+4) Deploy the updated MLMLIVE mainui frontend/app.
+
+5) Test with ONE Calling Team code:
+   - Create a new MLMLIVE user with the Calling Team code.
+   - In Firestore users/<user>, verify:
+       referredByMteam = main Marketing Member ID
+       referredBy = main Marketing refer code
+       mteamCouponCode = main Marketing coupon
+       callingTeamId = correct caller ID
+       callingTeamCode = entered caller code
+   - Open Marketing > My Calling Team > Analysis and confirm the user appears.
+   - Login to /calling-login with that caller and confirm only that caller's user appears.
+   - At subscription checkout, verify the auto coupon is the MAIN Marketing coupon, not the Calling Team code.

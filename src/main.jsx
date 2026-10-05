@@ -7,6 +7,7 @@ import { GeneralContext } from "./Context/GeneralContext.jsx";
 import { ThemeProvider } from "./Context/ThemeContext.jsx";
 import { Toast } from '@heroui/react';
 import { MarketingAuthProvider } from "./Auth/MarketingAuthContext.jsx";
+import { CallingAuthProvider } from "./Auth/CallingAuthContext.jsx";
 
 if (import.meta.env.PROD) console.error = () => {};
 
@@ -16,7 +17,7 @@ createRoot(document.getElementById("root")).render(
       <GeneralContext>
         <Toast.Provider />
       <BrowserRouter>
-        <MarketingAuthProvider><Routes><Route path="/*" element={<App />} /></Routes></MarketingAuthProvider>
+        <MarketingAuthProvider><CallingAuthProvider><Routes><Route path="/*" element={<App />} /></Routes></CallingAuthProvider></MarketingAuthProvider>
       </BrowserRouter>
       </GeneralContext>
     </ThemeProvider>

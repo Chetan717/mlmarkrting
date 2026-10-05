@@ -19,6 +19,7 @@ import MonthWiseReport from "./MonthWiseReport";
 import LeadManagement from "./LeadManagement";
 import FreshLead from "./FreshLead";
 import TaskManagement from "./TaskManagement";
+import CallingTeamManagement from "./CallingTeamManagement";
 import { useTheme } from "../../Context/ThemeContext";
 import {
   getSession,
@@ -252,6 +253,7 @@ const ALL_TABS = [
   { id: "taskmanagement", label: "Task Management", shortLabel: "Tasks", icon: IcTasks },
   { id: "team", label: "My Team", shortLabel: "Team", icon: IcTeam },
   { id: "portalusers", label: "Portal Users", shortLabel: "Users", icon: IcTeam },
+  { id: "callingteam", label: "My Calling Team", shortLabel: "Calling", icon: IcTeam },
 ];
 
 export default function MteamPortal() {
@@ -368,7 +370,7 @@ export default function MteamPortal() {
     : (session.parentMobile ?? session.mobile);
 
   const allowedTabs = ALL_TABS.filter((t) => {
-    if (t.id === "team" || t.id === "portalusers") return isMember;
+    if (t.id === "team" || t.id === "portalusers" || t.id === "callingteam") return isMember;
     if (isMember) return true;
     return (session.tabs ?? ["dashboard"]).includes(t.id);
   });
@@ -451,6 +453,8 @@ export default function MteamPortal() {
       return <MyMarketingTeam />;
     if (activeTab === "portalusers" && isMember)
       return <TeamUserManagement mteamId={session.mteamId} />;
+    if (activeTab === "callingteam" && isMember)
+      return <CallingTeamManagement />;
     return (
       <div
         style={{ padding: 40, color: "var(--p-text-3)", textAlign: "center" }}
