@@ -51,9 +51,13 @@ test("Calling analysis includes Lead Management expiry filters and plan helpers 
   assert.match(portalSource, /<th>Expiry<\/th>/);
 });
 
-test("Calling login has explicit Vercel/custom-domain CORS and copy-link toast", () => {
-  assert.match(functionsSource, /const CALLING_CORS =/);
-  assert.match(functionsSource, /vercel\\\.app/);
-  assert.match(functionsSource, /callingVerifyTwoFactorOtp = onCall\(\{ region: REGION, cors: CALLING_CORS/);
+test("Calling endpoints keep standard callable CORS configuration", () => {
+  assert.match(functionsSource, /const CALLING_PUBLIC_OPTIONS = \{ region: REGION, cors: true \}/);
+  assert.doesNotMatch(functionsSource, /CALLING_PUBLIC_OPTIONS = \{[^}]*invoker:/);
+  assert.match(functionsSource, /callingVerifyTwoFactorOtp = onCall\(CALLING_PUBLIC_OPTIONS/);
+  assert.match(functionsSource, /callingSessionStatus = onCall\(CALLING_PUBLIC_OPTIONS/);
+  assert.match(functionsSource, /callingGetDashboard = onCall\(CALLING_PUBLIC_OPTIONS/);
+  assert.match(functionsSource, /marketingListCallingTeam = onCall\(CALLING_PUBLIC_OPTIONS/);
+  assert.match(functionsSource, /claimCallingTeamAttribution = onCall\(CALLING_PUBLIC_OPTIONS/);
   assert.match(managerSource, /Calling Login Link Copied/);
 });

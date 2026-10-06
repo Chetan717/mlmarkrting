@@ -28,14 +28,12 @@ const scrypt = promisify(crypto.scrypt);
 const EMAIL_PASS = defineSecret("EMAIL_PASS");
 const EMAIL_NODEMAILER = defineString("EMAIL_NODEMAILER", { default: "soilbooster717@gmail.com" });
 const REGION = "asia-south1";
-// Calling panel is served from Vercel previews/custom MLMLIVE domains.
-// Keep this explicit so callable preflight requests are accepted after deploy.
-const CALLING_CORS = [
-  /^https:\/\/[a-z0-9-]+\.vercel\.app$/i,
-  /^https:\/\/(?:[a-z0-9-]+\.)*mlmlive\.in$/i,
-  /^http:\/\/localhost(?::\d+)?$/i,
-  /^http:\/\/127\.0\.0\.1(?::\d+)?$/i,
-];
+// All Calling-Team endpoints are HTTPS callable functions. Firebase callable triggers
+// automatically handle browser OPTIONS/CORS and Firebase CLI makes callable endpoints public.
+// Keep IAM/invoker out of source so deploys use the standard callable lifecycle.
+// Sensitive operations still enforce Firebase auth + panel/session ownership inside handlers.
+const CALLING_PUBLIC_OPTIONS = { region: REGION, cors: true };
+const CALLING_PUBLIC_EMAIL_OPTIONS = { ...CALLING_PUBLIC_OPTIONS, secrets: [EMAIL_PASS] };
 const SESSION_MS = 10 * 60 * 60 * 1000;
 const OTP_MS = 5 * 60 * 1000;
 const ALL_TABS = ["dashboard", "reports", "leads", "freshleads", "taskmanagement", "team", "portalusers", "callingteam", "security"];
@@ -814,7 +812,7 @@ function summarizeCallingLeads(leads = []) {
   };
 }
 
-exports.marketingListCallingTeam = onCall({ region: REGION, cors: true }, async request => {
+exports.marketingListCallingTeam = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { owner } = await requireMarketingOwner(request);
   const membersSnapshot = await db.collection(CALLING_TEAM_COLLECTION).where("ownerId", "==", owner.id).get();
   const today = Timestamp.fromMillis(dateStartMs()), month = Timestamp.fromMillis(monthStartMs());
@@ -842,7 +840,7 @@ exports.marketingListCallingTeam = onCall({ region: REGION, cors: true }, async 
   };
 });
 
-exports.marketingCreateCallingMember = onCall({ region: REGION, cors: true }, async request => {
+exports.marketingCreateCallingMember = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { owner } = await requireMarketingOwner(request);
   const input = validateCallingMemberInput(request.data);
   const [marketingEmail, couponConflict] = await Promise.all([
@@ -865,7 +863,7 @@ exports.marketingCreateCallingMember = onCall({ region: REGION, cors: true }, as
   return { member: callingMemberPublic(await memberRef.get()) };
 });
 
-exports.marketingUpdateCallingMember = onCall({ region: REGION, cors: true }, async request => {
+exports.marketingUpdateCallingMember = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { owner } = await requireMarketingOwner(request);
   const memberId = String(request.data?.memberId || "").trim();
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(memberId)) throw new HttpsError("invalid-argument", "Invalid Calling Team member ID.");
@@ -900,7 +898,7 @@ exports.marketingUpdateCallingMember = onCall({ region: REGION, cors: true }, as
   return { member: callingMemberPublic(await memberRef.get()) };
 });
 
-exports.marketingSetCallingMemberActive = onCall({ region: REGION, cors: true }, async request => {
+exports.marketingSetCallingMemberActive = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { owner } = await requireMarketingOwner(request);
   const memberId = String(request.data?.memberId || "").trim();
   const active = request.data?.active === true;
@@ -914,7 +912,7 @@ exports.marketingSetCallingMemberActive = onCall({ region: REGION, cors: true },
   return { ok: true, active };
 });
 
-exports.marketingResetCallingMemberPassword = onCall({ region: REGION, cors: true }, async request => {
+exports.marketingResetCallingMemberPassword = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { owner } = await requireMarketingOwner(request);
   const memberId = String(request.data?.memberId || "").trim();
   const member = await db.collection(CALLING_TEAM_COLLECTION).doc(memberId).get();
@@ -925,7 +923,7 @@ exports.marketingResetCallingMemberPassword = onCall({ region: REGION, cors: tru
   return { ok: true };
 });
 
-exports.marketingGetCallingMemberAnalysis = onCall({ region: REGION, cors: true }, async request => {
+exports.marketingGetCallingMemberAnalysis = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { owner } = await requireMarketingOwner(request);
   const memberId = String(request.data?.memberId || "").trim();
   const member = await db.collection(CALLING_TEAM_COLLECTION).doc(memberId).get();
@@ -987,7 +985,7 @@ function selectAppUserDocument(snapshot, authUid) {
   )[0];
 }
 
-exports.resolveCallingTeamCode = onCall({ region: REGION, cors: true }, async request => {
+exports.resolveCallingTeamCode = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const code = normalizeCallingCode(request.data?.code);
   if (!/^[A-Z0-9_-]{4,12}$/.test(code)) return { matched: false };
   await rateLimit("calling_code_resolve_ip", ipOf(request), 60, 60 * 1000);
@@ -1021,7 +1019,7 @@ exports.resolveCallingTeamCode = onCall({ region: REGION, cors: true }, async re
   };
 });
 
-exports.claimCallingTeamAttribution = onCall({ region: REGION, cors: true }, async request => {
+exports.claimCallingTeamAttribution = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   if (!request.auth || request.auth.token?.panel) {
     throw new HttpsError("unauthenticated", "MLM LIVE user sign in required.");
   }
@@ -1130,7 +1128,7 @@ exports.claimCallingTeamAttribution = onCall({ region: REGION, cors: true }, asy
   };
 });
 
-exports.callingStartTwoFactorOtp = onCall({ region: REGION, cors: CALLING_CORS, secrets: [EMAIL_PASS] }, async request => {
+exports.callingStartTwoFactorOtp = onCall(CALLING_PUBLIC_EMAIL_OPTIONS, async request => {
   const email = normalizeEmail(request.data?.email);
   if (!EMAIL_PATTERN.test(email) || email.length > 254) throw new HttpsError("invalid-argument", "Enter a valid registered email.");
   await rateLimit("calling_email_otp_ip", ipOf(request), 8, 10 * 60 * 1000);
@@ -1142,7 +1140,7 @@ exports.callingStartTwoFactorOtp = onCall({ region: REGION, cors: CALLING_CORS, 
   return { challengeId: await createCallingEmailChallenge(member), delivery: "email", maskedEmail: maskEmail(email) };
 });
 
-exports.callingVerifyTwoFactorOtp = onCall({ region: REGION, cors: CALLING_CORS }, async request => {
+exports.callingVerifyTwoFactorOtp = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const id = String(request.data?.challengeId || ""), otp = String(request.data?.otp || "");
   if (!/^[a-f0-9]{48}$/.test(id) || !/^\d{6}$/.test(otp)) throw new HttpsError("invalid-argument", "Enter a valid 6-digit OTP.");
   await rateLimit("calling_email_verify_ip", ipOf(request), 20, 10 * 60 * 1000);
@@ -1155,7 +1153,7 @@ exports.callingVerifyTwoFactorOtp = onCall({ region: REGION, cors: CALLING_CORS 
   };
 });
 
-exports.callingCreateSessionFromTwoFactor = onCall({ region: REGION, cors: CALLING_CORS }, async request => {
+exports.callingCreateSessionFromTwoFactor = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const challengeId = String(request.data?.challengeId || ""), ticket = String(request.data?.loginTicket || ""), password = String(request.data?.password || "");
   await rateLimit("calling_password_ip", ipOf(request), 20, 10 * 60 * 1000);
   const { ref: challengeRef, data: verified } = await readCallingTicket(challengeId, ticket);
@@ -1183,7 +1181,7 @@ exports.callingCreateSessionFromTwoFactor = onCall({ region: REGION, cors: CALLI
   return { token: await getAuth().createCustomToken(uid, claims), expiresAt: expiresAt.toMillis(), loginAlert: previous };
 });
 
-exports.callingSessionStatus = onCall({ region: REGION, cors: CALLING_CORS }, async request => {
+exports.callingSessionStatus = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { ref, data, member, owner } = await callingSessionFor(request);
   await ref.update({ lastSeenAt: FieldValue.serverTimestamp() });
   return {
@@ -1201,7 +1199,7 @@ exports.callingSessionStatus = onCall({ region: REGION, cors: CALLING_CORS }, as
   };
 });
 
-exports.callingUnlockSession = onCall({ region: REGION, cors: CALLING_CORS }, async request => {
+exports.callingUnlockSession = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { ref, member } = await callingSessionFor(request);
   await rateLimit("calling_unlock", `${request.auth.uid}:${ipOf(request)}`, 10, 15 * 60 * 1000);
   await verifyOrCreateCallingPassword(member.id, String(request.data?.password || ""), false);
@@ -1209,7 +1207,7 @@ exports.callingUnlockSession = onCall({ region: REGION, cors: CALLING_CORS }, as
   return { ok: true };
 });
 
-exports.callingPanelLogout = onCall({ region: REGION, cors: CALLING_CORS }, async request => {
+exports.callingPanelLogout = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Not signed in.");
   const target = await db.collection("_panelSessions").doc(request.auth.uid).get();
   if (target.exists && target.data().panel === "calling") await target.ref.delete();
@@ -1217,7 +1215,7 @@ exports.callingPanelLogout = onCall({ region: REGION, cors: CALLING_CORS }, asyn
   return { ok: true };
 });
 
-exports.callingGetDashboard = onCall({ region: REGION, cors: CALLING_CORS }, async request => {
+exports.callingGetDashboard = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { member, owner } = await callingSessionFor(request);
   const bundle = await callingLeadsBundle(owner, member);
   return {
@@ -1234,7 +1232,7 @@ exports.callingGetDashboard = onCall({ region: REGION, cors: CALLING_CORS }, asy
   };
 });
 
-exports.callingSaveFollowup = onCall({ region: REGION, cors: CALLING_CORS }, async request => {
+exports.callingSaveFollowup = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { member, owner } = await callingSessionFor(request);
   const userId = String(request.data?.userId || "").trim();
   const status = cleanText(request.data?.leadStatus || "Follow Up", 40);
