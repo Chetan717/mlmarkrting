@@ -29,3 +29,14 @@ IMPORTANT
    - Open Marketing > My Calling Team > Analysis and confirm the user appears.
    - Login to /calling-login with that caller and confirm only that caller's user appears.
    - At subscription checkout, verify the auto coupon is the MAIN Marketing coupon, not the Calling Team code.
+
+=== 2026-10-06 CALLING LOGIN CORS + CSP HOTFIX ===
+
+1) Deploy ONLY these Calling login/panel functions from this Marketing project:
+
+firebase deploy --only functions:callingStartTwoFactorOtp,functions:callingVerifyTwoFactorOtp,functions:callingCreateSessionFromTwoFactor,functions:callingSessionStatus,functions:callingUnlockSession,functions:callingPanelLogout,functions:callingGetDashboard,functions:callingSaveFollowup
+
+2) Redeploy Marketing frontend to Vercel so the CSP + Copy Link toast changes go live.
+
+Do NOT redeploy MLMLIVE authSignupInit/authSignupVerify for this hotfix.
+No Firestore index deploy is required for this hotfix.

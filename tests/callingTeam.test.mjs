@@ -50,3 +50,10 @@ test("Calling analysis includes Lead Management expiry filters and plan helpers 
   assert.match(portalSource, /expiringIn/);
   assert.match(portalSource, /<th>Expiry<\/th>/);
 });
+
+test("Calling login has explicit Vercel/custom-domain CORS and copy-link toast", () => {
+  assert.match(functionsSource, /const CALLING_CORS =/);
+  assert.match(functionsSource, /vercel\\\.app/);
+  assert.match(functionsSource, /callingVerifyTwoFactorOtp = onCall\(\{ region: REGION, cors: CALLING_CORS/);
+  assert.match(managerSource, /Calling Login Link Copied/);
+});

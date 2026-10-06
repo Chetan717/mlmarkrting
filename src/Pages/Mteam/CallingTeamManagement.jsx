@@ -37,6 +37,7 @@ export default function CallingTeamManagement() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [filters, setFilters] = useState({ search: "", planStatus: "all", leadStatus: "all", profile: "all", company: "all", expiringIn: "all", from: "", to: "" });
   const [page, setPage] = useState(1);
+  const [toast, setToast] = useState("");
 
   const loadMembers = async () => {
     setLoading(true); setError("");
@@ -90,6 +91,29 @@ export default function CallingTeamManagement() {
     } catch (e) { setError(errorText(e)); } finally { setAnalysisLoading(false); }
   };
 
+  const copyCallingLoginLink = async () => {
+    const link = `${window.location.origin}/calling-login`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = link;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      setToast("Calling Login Link Copied");
+    } catch {
+      setToast("Link copy नहीं हुआ");
+    }
+    window.setTimeout(() => setToast(""), 2200);
+  };
+
   const companies = useMemo(() => [...new Set((analysis?.leads || []).map(lead => lead.companyName).filter(Boolean))].sort(), [analysis]);
   const leadStatuses = useMemo(() => [...new Set((analysis?.leads || []).map(lead => lead.leadStatus).filter(Boolean))].sort(), [analysis]);
   const filtered = useMemo(() => {
@@ -121,11 +145,13 @@ export default function CallingTeamManagement() {
     <div style={s.header}>
       <div><h2 style={s.title}>My Calling Team</h2><p style={s.sub}>Calling members, tracking codes और member-wise user analysis. Calling codes पर commission हमेशा ₹0 है।</p></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button style={s.secondaryBtn} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/calling-login`)}>Copy Calling Login Link</button>
+        <button style={s.secondaryBtn} onClick={copyCallingLoginLink}>Copy Calling Login Link</button>
         <button style={s.secondaryBtn} disabled={loading} onClick={loadMembers}>{loading ? "Loading…" : loaded ? "Refresh Team" : "Fetch Team"}</button>
         <button style={s.primaryBtn} onClick={openAdd}>+ Add Calling Member</button>
       </div>
     </div>
+
+    {toast && <div role="status" aria-live="polite" style={s.toast}>✓ {toast}</div>}
 
     {error && <div style={s.error}>{error}</div>}
 
@@ -209,6 +235,7 @@ const s = {
   field: { display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--p-text-3)" },
   input: { width: "100%", minHeight: 40, boxSizing: "border-box", padding: "8px 10px", borderRadius: 9, border: "1px solid var(--p-border)", background: "var(--p-card2)", color: "var(--p-text)", outline: "none" },
   notice: { margin: "14px 0", padding: 12, background: "#f59e0b12", border: "1px solid #f59e0b35", borderRadius: 10, color: "var(--p-text-2)", fontSize: 12, lineHeight: 1.5 },
+  toast: { position: "fixed", top: 18, right: 18, zIndex: 9999, padding: "11px 14px", borderRadius: 10, background: "#0f172a", border: "1px solid #10b98170", color: "#d1fae5", boxShadow: "0 14px 36px #0005", fontSize: 13, fontWeight: 800 },
   error: { padding: 12, borderRadius: 10, background: "#ef444415", border: "1px solid #ef444440", color: "#ef4444", fontSize: 13 },
   empty: { padding: 40, textAlign: "center", background: "var(--p-card)", border: "1px dashed var(--p-border)", borderRadius: 16, color: "var(--p-text-3)" },
   hint: { margin: "5px 0 0", fontSize: 11, color: "var(--p-text-4)" },
