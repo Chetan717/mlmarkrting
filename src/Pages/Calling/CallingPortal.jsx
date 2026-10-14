@@ -40,7 +40,7 @@ export default function CallingPortal() {
   const fetchData = async () => {
     setLoading(true); setError("");
     try {
-      const result = await httpsCallable(functions, "callingGetDashboard")({});
+      const result = await httpsCallable(functions, "callingGetDashboard")({ forceRefresh: Boolean(data) });
       setData(result.data || null); setPage(1);
     } catch (e) { setError(errorText(e)); } finally { setLoading(false); }
   };

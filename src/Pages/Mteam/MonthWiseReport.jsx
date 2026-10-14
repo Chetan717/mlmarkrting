@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, query, where, doc, getDoc, limit } from "firebase/firestore";
-import { db } from "../../../Firebase";
+import { db, auth } from "../../../Firebase";
+import { getSuccessfulSubscriptionRows } from "../../Utils/marketingReadCache";
 import Paginator from "./Paginator";
 
 // ── SVG Icons ─────────────────────────────────────────────
@@ -31,6 +32,19 @@ const IcInbox = () => (
 const IcChevDown = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
 );
+
+// Shared signed-in-user cache with Main Team and Lead Management.
+// Explicit Refresh Report requests fresh Firestore data.
+async function subscriptionsForReport(couponCode, forceRefresh = false) {
+  return getSuccessfulSubscriptionRows({
+    uid: auth.currentUser?.uid, couponCode, force: forceRefresh,
+    load: async () => {
+      const snap = await getDocs(query(collection(db, "subscription"),
+        where("couponApplied", "==", couponCode), where("payment", "==", "Success")));
+      return snap.docs.map(d => ({ id: d.id, documentId: d.id, ...d.data() }));
+    },
+  });
+}
 
 const SUB_PER_PAGE = 20;
 
@@ -79,6 +93,7 @@ export default function MonthWiseReport({ mteamId, mobile, sessionCouponCode = "
   const [commPct, setCommPct] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const today = new Date();
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -140,15 +155,7 @@ export default function MonthWiseReport({ mteamId, mobile, sessionCouponCode = "
 
         setCoupon(couponDoc);
 
-        const subSnap = await getDocs(
-          query(
-            collection(db, "subscription"),
-            where("couponApplied", "==", couponDoc.code),
-            where("payment", "==", "Success")
-          )
-        );
-
-        const subs = subSnap.docs.map((d) => ({ documentId: d.id, ...d.data() }));
+        const subs = await subscriptionsForReport(couponDoc.code, reloadKey > 0);
         setSubscribers(subs);
       } catch (err) {
         setError(err.message);
@@ -157,7 +164,7 @@ export default function MonthWiseReport({ mteamId, mobile, sessionCouponCode = "
       }
     };
     fetchData();
-  }, [mobile, mteamId, sessionCouponCode, sessionCommissionPercentage]);
+  }, [mobile, mteamId, sessionCouponCode, sessionCommissionPercentage, reloadKey]);
 
   const filtered = useMemo(() => {
     if (!fromDate && !toDate) return subscribers;
@@ -261,6 +268,12 @@ export default function MonthWiseReport({ mteamId, mobile, sessionCouponCode = "
             )}
           </p>
         </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => setReloadKey(value => value + 1)}
+          title="Fetch the latest paid subscriptions from Firestore"
+          style={{ display: "flex", alignItems: "center", padding: "10px 14px", borderRadius: 10, border: "1px solid #6366f1", background: "#6366f115", color: "#818cf8", fontWeight: 700, cursor: "pointer" }}>
+          Refresh Report
+        </button>
         <button
           onClick={() => {
             const headers = ["Month", "Name", "Mobile", "Plan", "Status", "Amount (₹)", `Commission (${commPct}%)`, "Purchase Date"];
@@ -286,6 +299,7 @@ export default function MonthWiseReport({ mteamId, mobile, sessionCouponCode = "
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Download Excel ({filtered.length} records)
         </button>
+        </div>
       </div>
 
       {/* ── Date Range Picker ───────────────────────────────────────── */}

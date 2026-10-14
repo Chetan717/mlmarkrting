@@ -39,10 +39,10 @@ export default function CallingTeamManagement() {
   const [page, setPage] = useState(1);
   const [toast, setToast] = useState("");
 
-  const loadMembers = async () => {
+  const loadMembers = async (forceRefresh = false) => {
     setLoading(true); setError("");
     try {
-      const result = await httpsCallable(functions, "marketingListCallingTeam")({});
+      const result = await httpsCallable(functions, "marketingListCallingTeam")({ forceRefresh: forceRefresh === true });
       setMembers(result.data?.members || []);
       setLoaded(true);
     } catch (e) { setError(errorText(e)); } finally { setLoading(false); }
@@ -61,7 +61,7 @@ export default function CallingTeamManagement() {
       const payload = { ...form, code: normalizeCode(form.code) };
       if (editing) await httpsCallable(functions, "marketingUpdateCallingMember")({ memberId: editing.id, ...payload });
       else await httpsCallable(functions, "marketingCreateCallingMember")(payload);
-      setFormOpen(false); setEditing(null); setForm(emptyForm); await loadMembers();
+      setFormOpen(false); setEditing(null); setForm(emptyForm); await loadMembers(true);
     } catch (e) { setError(errorText(e)); } finally { setSaving(false); }
   };
 
@@ -146,7 +146,7 @@ export default function CallingTeamManagement() {
       <div><h2 style={s.title}>My Calling Team</h2><p style={s.sub}>Calling members, tracking codes और member-wise user analysis. Calling codes पर commission हमेशा ₹0 है।</p></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button style={s.secondaryBtn} onClick={copyCallingLoginLink}>Copy Calling Login Link</button>
-        <button style={s.secondaryBtn} disabled={loading} onClick={loadMembers}>{loading ? "Loading…" : loaded ? "Refresh Team" : "Fetch Team"}</button>
+        <button style={s.secondaryBtn} disabled={loading} onClick={() => loadMembers(loaded)}>{loading ? "Loading…" : loaded ? "Refresh Team" : "Fetch Team"}</button>
         <button style={s.primaryBtn} onClick={openAdd}>+ Add Calling Member</button>
       </div>
     </div>

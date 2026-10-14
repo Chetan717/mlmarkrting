@@ -4,7 +4,8 @@ import {
   collection, getDocs, addDoc, updateDoc, deleteDoc,
   doc, serverTimestamp, query, orderBy,
 } from "firebase/firestore";
-import { db } from "../../../Firebase";
+import { db, auth } from "../../../Firebase";
+import { cachedMarketingRead, invalidateMarketingRead } from "../../Utils/marketingReadCache";
 
 import {
   Button, Input, Switch, Chip,
@@ -319,12 +320,14 @@ export default function MarketingTeam() {
   const [pageSize,   setPageSize]   = useState(10);
 
   // ── Initial fetch (runs once) ─────────────────────────────
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const q = query(collection(db, COLLECTION), orderBy("createdAt", "desc"));
-      const snap = await getDocs(q);
-      setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const rows = await cachedMarketingRead(auth.currentUser?.uid, "mteam-members", async () => {
+        const snap = await getDocs(query(collection(db, COLLECTION), orderBy("createdAt", "desc")));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      }, { ttlMs: 90000, maxRows: 2500, force });
+      setUsers(rows);
     } catch (err) {
       console.error("Fetch error:", err);
     } finally {
@@ -367,6 +370,7 @@ export default function MarketingTeam() {
       const ref = await addDoc(collection(db, COLLECTION), {
         ...form, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       });
+      invalidateMarketingRead(auth.currentUser?.uid, "mteam-members");
       // Swap temp with real id
       setUsers((prev) => prev.map((u) => u.id === tempId ? { ...u, id: ref.id } : u));
     } catch (err) {
@@ -384,6 +388,7 @@ export default function MarketingTeam() {
     setEditingId(null);
     try {
       await updateDoc(doc(db, COLLECTION, userId), { ...form, updatedAt: serverTimestamp() });
+      invalidateMarketingRead(auth.currentUser?.uid, "mteam-members");
     } catch (err) {
       // Rollback on failure
       console.error("Save error:", err);
@@ -404,6 +409,7 @@ export default function MarketingTeam() {
     });
     try {
       await deleteDoc(doc(db, COLLECTION, user.id));
+      invalidateMarketingRead(auth.currentUser?.uid, "mteam-members");
     } catch (err) {
       // Rollback on failure
       console.error("Delete error:", err);
@@ -431,6 +437,9 @@ export default function MarketingTeam() {
           <Button variant="primary" size="sm" className="gap-1 font-semibold"
             onPress={openAdd} isDisabled={showAddRow}>
             <IconAdd /> Add Member
+          </Button>
+          <Button variant="outline" size="sm" onPress={() => fetchUsers(true)} isDisabled={loading}>
+            ↻ Refresh Team
           </Button>
         </Card.Header>
 

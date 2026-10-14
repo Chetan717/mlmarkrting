@@ -12,7 +12,7 @@ import {
   limit,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../../../Firebase";
+import { db, auth } from "../../../Firebase";
 import { COLL } from "../../Utils/collections";
 import { getSession } from "../../Utils/sessionManager";
 import Paginator from "./Paginator";
@@ -21,6 +21,17 @@ import Paginator from "./Paginator";
 const PAGE_SIZE = 15;
 const MOBILE_REGEX = /^\d{10}$/;
 const FETCH_LIMIT = 2000; // bounded fetch; data is filtered/paginated client-side
+// No browser storage: short per-login, per-owner memory cache. Never mix users.
+const freshLeadCache = new Map();
+const FRESH_CACHE_MS = 90000;
+function freshLeadCacheKey(mteamId) {
+  return auth.currentUser?.uid && mteamId ? `${auth.currentUser.uid}:${mteamId}` : "";
+}
+function clearFreshLeadCache(mteamId) {
+  const key = freshLeadCacheKey(mteamId);
+  if (key) freshLeadCache.delete(key);
+}
+
 
 function sanitize(v) {
   if (typeof v !== "string") return v ?? "";
@@ -630,11 +641,18 @@ export default function FreshLead({ mteamSession }) {
   const [toast, setToast] = useState(null);
 
   // ── fetch leads scoped to this team ────────────────────────────────────────
-  const fetchLeads = useCallback(async () => {
+  const fetchLeads = useCallback(async (force = false) => {
     if (!mteamId) return;
     setLoading(true);
     setError(null);
     try {
+      const cacheKey = freshLeadCacheKey(mteamId);
+      const cached = cacheKey && freshLeadCache.get(cacheKey);
+      if (force !== true && cached && cached.until > Date.now()) {
+        setLeads(cached.leads);
+        setLoading(false);
+        return;
+      }
       const snap = await getDocs(
         query(
           collection(db, COLL.FRESHLEADS),
@@ -643,7 +661,12 @@ export default function FreshLead({ mteamSession }) {
           limit(FETCH_LIMIT),
         ),
       );
-      setLeads(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const leads = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setLeads(leads);
+      if (cacheKey) {
+        if (freshLeadCache.size >= 8) freshLeadCache.clear();
+        freshLeadCache.set(cacheKey, { leads, until: Date.now() + FRESH_CACHE_MS });
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -681,6 +704,7 @@ export default function FreshLead({ mteamSession }) {
         setLeads((prev) =>
           prev.map((l) => (l.id === formModal.id ? { ...l, ...data } : l)),
         );
+        clearFreshLeadCache(mteamId);
         setToast({ type: "success", msg: "Lead updated successfully" });
       } else {
         const payload = {
@@ -697,6 +721,7 @@ export default function FreshLead({ mteamSession }) {
           { id: ref.id, ...payload, createdAt: new Date() },
           ...prev,
         ]);
+        clearFreshLeadCache(mteamId);
         setToast({ type: "success", msg: "Lead added successfully" });
       }
       setFormModal(null);
@@ -717,7 +742,8 @@ export default function FreshLead({ mteamSession }) {
         updatedAt: serverTimestamp(),
         updatedBy: sanitize(session?.name ?? ""),
       });
-      setToast({
+      clearFreshLeadCache(mteamId);
+        setToast({
         type: "success",
         msg: next ? "Marked as Downloaded" : "Marked as Not Downloaded",
       });
@@ -736,7 +762,8 @@ export default function FreshLead({ mteamSession }) {
     try {
       await deleteDoc(doc(db, COLL.FRESHLEADS, deleteTarget.id));
       setLeads((prev) => prev.filter((l) => l.id !== deleteTarget.id));
-      setToast({ type: "success", msg: "Lead deleted" });
+      clearFreshLeadCache(mteamId);
+        setToast({ type: "success", msg: "Lead deleted" });
       setDeleteTarget(null);
     } catch (e) {
       setToast({ type: "error", msg: e.message || "Failed to delete" });
@@ -1100,7 +1127,7 @@ export default function FreshLead({ mteamSession }) {
           />
         </div>
         <button
-          onClick={fetchLeads}
+          onClick={() => fetchLeads(true)}
           disabled={loading}
           style={{
             display: "flex",

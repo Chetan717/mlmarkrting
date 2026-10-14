@@ -1,9 +1,10 @@
+import { cachedMarketingRead, getSuccessfulSubscriptionRows } from "../../Utils/marketingReadCache";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   collection, getDocs, query, where, doc, setDoc,
   serverTimestamp, Timestamp, orderBy, limit,
 } from "firebase/firestore";
-import { db, functions } from "../../../Firebase";
+import { db, functions, auth } from "../../../Firebase";
 import { httpsCallable } from "firebase/functions";
 import { COLL } from "../../Utils/collections";
 import {
@@ -470,18 +471,13 @@ export default function LeadManagement({ mteamSession }) {
 
         // Fetch active & launched MLM companies from mlmcomp collection
         try {
-          const compSnap = await getDocs(
-            query(
-              collection(db, "mlmcomp"),
-              where("Active", "==", true),
-              where("launched", "==", true)
-            )
-          );
-          const compList = compSnap.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .map(c => c.name ?? c.companyName ?? c.title ?? "")
-            .filter(Boolean)
-            .sort();
+          const compList = await cachedMarketingRead(auth.currentUser?.uid, "active-mlmcomp", async () => {
+            const compSnap = await getDocs(query(
+              collection(db, "mlmcomp"), where("Active", "==", true), where("launched", "==", true)
+            ));
+            return compSnap.docs.map(d => d.data()?.name ?? d.data()?.companyName ?? d.data()?.title ?? "")
+              .filter(Boolean).sort();
+          }, { ttlMs: 600000, maxRows: 1500 });
           setMlmCompanies(compList);
         } catch (_) { }
       } catch (e) {
@@ -519,16 +515,16 @@ export default function LeadManagement({ mteamSession }) {
       });
 
       // 2. subscriptions for this coupon (successful) — keep latest per user
-      const subSnap = await getDocs(
-        query(
-          collection(db, COLL.SUBSCRIPTION),
-          where("couponApplied", "==", couponCode),
-          where("payment", "==", "Success")
-        )
-      );
+      const successSubs = await getSuccessfulSubscriptionRows({
+        uid: auth.currentUser?.uid, couponCode, source: COLL.SUBSCRIPTION, force: true,
+        load: async () => {
+          const snapshot = await getDocs(query(collection(db, COLL.SUBSCRIPTION),
+            where("couponApplied", "==", couponCode), where("payment", "==", "Success")));
+          return snapshot.docs.map(d => ({ id: d.id, documentId: d.id, ...d.data() }));
+        },
+      });
       const subsByMobile = {};
-      subSnap.docs.forEach(d => {
-        const s = { id: d.id, ...d.data() };
+      successSubs.forEach(s => {
         const prev = subsByMobile[s.mobileNo];
         if (!prev) {
           subsByMobile[s.mobileNo] = s;

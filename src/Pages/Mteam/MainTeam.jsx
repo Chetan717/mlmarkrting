@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import { auth } from "../../../Firebase";
+import { cachedMarketingRead, getSuccessfulSubscriptionRows } from "../../Utils/marketingReadCache";
 import {
   collection, query, where, getDocs, doc, getDoc, limit,
 } from "firebase/firestore";
@@ -198,6 +200,7 @@ export default function MarketingDashboard({ mteamSession } = {}) {
   const [selectedSub, setSelectedSub]       = useState(null);
   const [modalOpen, setModalOpen]           = useState(false);
   const [dashTab, setDashTab]               = useState("financial");
+  const [reloadKey, setReloadKey]             = useState(0);
 
   // ── 1. resolve session ─────────────────────────────────────────────────
   useEffect(() => {
@@ -258,44 +261,47 @@ export default function MarketingDashboard({ mteamSession } = {}) {
         const couponCode = coupon.code;
 
         // C: subscriptions with this coupon
-        const subSnap = await getDocs(
-          query(
-            collection(db, COLL.SUBSCRIPTION),
-            where("couponApplied", "==", couponCode),
-            where("payment", "==", "Success")
-          )
-        );
+        const uid = auth.currentUser?.uid;
+        const successSubscriptions = await getSuccessfulSubscriptionRows({
+          uid, couponCode, source: COLL.SUBSCRIPTION, force: reloadKey > 0,
+          load: async () => {
+            const snapshot = await getDocs(query(
+              collection(db, COLL.SUBSCRIPTION),
+              where("couponApplied", "==", couponCode),
+              where("payment", "==", "Success")
+            ));
+            return snapshot.docs.map(d => ({ id: d.id, documentId: d.id, ...d.data() }));
+          },
+        });
         // D: ALL users referred by this mteam member. This snapshot is needed
         // by the dashboard anyway, so reuse it to attach users to subscriptions
         // instead of issuing one extra Firestore query per subscription.
-        const refSnap = await getDocs(
-          query(collection(db, COLL.USERS), where("referredByMteam", "==", mt.documentId))
-        );
+        const referred = await cachedMarketingRead(uid, `referred:${mt.documentId}`, async () => {
+          const snapshot = await getDocs(query(
+            collection(db, COLL.USERS), where("referredByMteam", "==", mt.documentId)
+          ));
+          return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        }, { ttlMs: 60000, maxRows: 4000, force: reloadKey > 0 });
         const firstUserDocByMobile = new Map();
-        for (const userDoc of refSnap.docs) {
-          const mobileNo = userDoc.data()?.mobileNo;
-          if (mobileNo && !firstUserDocByMobile.has(mobileNo)) {
-            firstUserDocByMobile.set(mobileNo, userDoc);
+        for (const user of referred) {
+          if (user.mobileNo && !firstUserDocByMobile.has(user.mobileNo)) {
+            firstUserDocByMobile.set(user.mobileNo, user);
           }
         }
-
-        const subs = subSnap.docs.map((d) => {
-          const sub = { documentId: d.id, ...d.data() };
+        const subs = successSubscriptions.map((sub) => {
           const userDoc = firstUserDocByMobile.get(sub.mobileNo);
-          if (userDoc) {
-            sub._user = { documentId: userDoc.id, ...userDoc.data() };
-          }
-          return sub;
+          return userDoc ? { ...sub, _user: { ...userDoc, documentId: userDoc.id } } : sub;
         });
         setSubscribers(subs);
 
-        const referred = refSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         setReferredUsers(referred);
 
         // E: mlm profiles for referred users
         const mobiles = referred.map(u => u.mobileNo).filter(Boolean);
         const profileLookup = httpsCallable(functions, "marketingGetProfiles");
-        const profiles = await fetchMlmProfiles(mobiles, profileLookup);
+        const profiles = await cachedMarketingRead(uid, `profiles:${mt.documentId}:${[...new Set(mobiles)].sort().join(',')}`,
+          () => fetchMlmProfiles(mobiles, profileLookup),
+          { ttlMs: 60000, maxRows: 4000, force: reloadKey > 0 });
         setMlmProfiles(profiles);
 
       } catch (e) {
@@ -305,7 +311,7 @@ export default function MarketingDashboard({ mteamSession } = {}) {
       }
     };
     run();
-  }, [mlmUser]);
+  }, [mlmUser, reloadKey]);
 
   useEffect(() => { setPage(1); }, [search, filterStatus, sortBy]);
 
@@ -434,6 +440,9 @@ export default function MarketingDashboard({ mteamSession } = {}) {
             )}
           </div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={() => setReloadKey(k => k + 1)}
+              style={{ padding:"6px 12px", border:"1px solid var(--p-border)", borderRadius:20, background:"var(--p-card)", color:"var(--p-text)", cursor:"pointer", fontSize:12 }}
+              title="Reload current subscriptions, users and profiles from Firestore">↻ Refresh Dashboard</button>
             <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:20, border:`1px solid ${mteamDoc?.active ? "#10b98155" : "#ef444455"}`, fontSize:12, fontWeight:700, color: mteamDoc?.active ? "#10b981" : "#ef4444" }}>
               <span style={{ width:7, height:7, borderRadius:"50%", background: mteamDoc?.active ? "#10b981" : "#ef4444" }} />
               {mteamDoc?.active ? "Active Agent" : "Inactive"}

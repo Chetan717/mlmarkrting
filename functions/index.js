@@ -8,6 +8,8 @@ const { defineSecret, defineString } = require("firebase-functions/params");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const { promisify } = require("util");
+const { companyForLead, buildProfileIndex } = require("./callingCompany");
+const { createTimedCache } = require("./callingReadCache");
 const {
   EMAIL_PATTERN,
   normalizeEmail,
@@ -715,7 +717,7 @@ function safeCallingLead({ userDoc, subscription = null, profile = null, followu
     callingTeamId: String(user.callingTeamId || ""),
     callingTeamCode: normalizeCallingCode(user.callingTeamCode || caller?.data()?.code || ""),
     hasMlmProfile: Boolean(profile),
-    companyName: cleanText(profile?.companyName || subscription?.company || "", 100),
+    companyName: cleanText(companyForLead(user, profile, subscription), 100),
     profileName: cleanText(profile?.name || profile?.fullName || "", 80),
     plan: cleanText(subscription?.plan || "", 80),
     planType: cleanText(subscription?.planType || "", 50),
@@ -732,13 +734,17 @@ function safeCallingLead({ userDoc, subscription = null, profile = null, followu
   };
 }
 
-async function callingLeadsBundle(owner, member, maxUsers = 5000) {
+const callingBundleCache = createTimedCache({ maxEntries: 12 });
+const callingSubscriptionCache = createTimedCache({ maxEntries: 8 });
+async function callingLeadsBundle(owner, member, maxUsers = 5000, forceRefresh = false) {
+  // Owner+member isolation: only invoke after callingSessionFor/requireMarketingOwner.
+  const key = `${owner.id}:${member.id}:${maxUsers}`;
+  return callingBundleCache.get(key, async () => {
   const usersQuery = db.collection("users")
     .where("referredByMteam", "==", owner.id)
     .where("callingTeamId", "==", member.id);
-  const [usersSnapshot, totalSnapshot, coupon, followupsSnapshot] = await Promise.all([
+  const [usersSnapshot, coupon, followupsSnapshot] = await Promise.all([
     usersQuery.limit(maxUsers).get(),
-    usersQuery.count().get(),
     couponForMember(owner),
     db.collection(CALLING_FOLLOWUP_COLLECTION).where("ownerId", "==", owner.id).where("callingMemberId", "==", member.id).get(),
   ]);
@@ -746,7 +752,10 @@ async function callingLeadsBundle(owner, member, maxUsers = 5000) {
   const mobiles = [...new Set(users.map(document => mobile10(document.data().mobileNo)).filter(mobile => /^\d{10}$/.test(mobile)))];
   const couponCode = cleanText(coupon?.data()?.code, 12);
   const [subscriptions, profiles] = await Promise.all([
-    successfulSubscriptions(couponCode),
+    callingSubscriptionCache.get(`${owner.id}:${couponCode}`, () => successfulSubscriptions(couponCode), {
+      ttlMs: 90000, forceRefresh,
+      shouldCache: subscriptions => subscriptions.length <= 5000,
+    }),
     (async () => {
       const output = [];
       for (let index = 0; index < mobiles.length; index += 30) {
@@ -758,11 +767,7 @@ async function callingLeadsBundle(owner, member, maxUsers = 5000) {
       return output;
     })(),
   ]);
-  const profilesByMobile = new Map();
-  for (const profile of profiles) {
-    const mobile = mobile10(profile.mobile);
-    if (mobile && !profilesByMobile.has(mobile)) profilesByMobile.set(mobile, profile);
-  }
+  const profilesByMobile = buildProfileIndex(profiles);
   const subscriptionsByMobile = latestSubscriptionsByMobile(subscriptions);
   const followupsByUser = new Map(followupsSnapshot.docs.map(document => [String(document.data().userId || ""), document.data()]));
   const leads = users.map(userDoc => {
@@ -775,7 +780,12 @@ async function callingLeadsBundle(owner, member, maxUsers = 5000) {
       caller: member,
     });
   }).sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
-  return { leads, totalUsers: totalSnapshot.data().count, truncated: totalSnapshot.data().count > leads.length, couponCode };
+  // Avoid an extra count query for ordinary lists under maxUsers; only a
+  // maxed-out list needs aggregation to establish truncation.
+  const totalUsers = usersSnapshot.size < maxUsers ? usersSnapshot.size :
+    (await usersQuery.count().get()).data().count;
+  return { leads, totalUsers, truncated: totalUsers > leads.length, couponCode };
+  }, { ttlMs: 60000, forceRefresh, shouldCache: bundle => bundle.leads.length <= 500 });
 }
 
 function summarizeCallingLeads(leads = []) {
@@ -928,7 +938,7 @@ exports.marketingGetCallingMemberAnalysis = onCall(CALLING_PUBLIC_OPTIONS, async
   const memberId = String(request.data?.memberId || "").trim();
   const member = await db.collection(CALLING_TEAM_COLLECTION).doc(memberId).get();
   if (!member.exists || member.data().ownerId !== owner.id) throw new HttpsError("permission-denied", "Calling Team member not found.");
-  const bundle = await callingLeadsBundle(owner, member);
+  const bundle = await callingLeadsBundle(owner, member, 5000, request.data?.forceRefresh === true);
   return {
     member: callingMemberPublic(member),
     summary: summarizeCallingLeads(bundle.leads),
@@ -1217,7 +1227,7 @@ exports.callingPanelLogout = onCall(CALLING_PUBLIC_OPTIONS, async request => {
 
 exports.callingGetDashboard = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   const { member, owner } = await callingSessionFor(request);
-  const bundle = await callingLeadsBundle(owner, member);
+  const bundle = await callingLeadsBundle(owner, member, 5000, request.data?.forceRefresh === true);
   return {
     account: {
       name: cleanText(member.data().name, 80),
@@ -1264,5 +1274,6 @@ exports.callingSaveFollowup = onCall(CALLING_PUBLIC_OPTIONS, async request => {
       createdAt: existing.createdAt || FieldValue.serverTimestamp(),
     }, { merge: true });
   });
+  callingBundleCache.invalidate(`${owner.id}:${member.id}:5000`);
   return { ok: true, leadStatus: status, nextFollowupDate, lastNote: note };
 });
