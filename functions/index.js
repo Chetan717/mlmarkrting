@@ -10,6 +10,8 @@ const crypto = require("crypto");
 const { promisify } = require("util");
 const { companyForLead, buildProfileIndex } = require("./callingCompany");
 const { createTimedCache } = require("./callingReadCache");
+const { dailySessionExpiry, sessionDayKey, validPanelSession, effectiveSessionExpiry } = require("./panelSessionPolicy");
+const { normalizeLookupMobile, lookupRegisteredCustomer } = require("./customerLookup");
 const {
   EMAIL_PATTERN,
   normalizeEmail,
@@ -36,9 +38,8 @@ const REGION = "asia-south1";
 // Sensitive operations still enforce Firebase auth + panel/session ownership inside handlers.
 const CALLING_PUBLIC_OPTIONS = { region: REGION, cors: true };
 const CALLING_PUBLIC_EMAIL_OPTIONS = { ...CALLING_PUBLIC_OPTIONS, secrets: [EMAIL_PASS] };
-const SESSION_MS = 10 * 60 * 60 * 1000;
 const OTP_MS = 5 * 60 * 1000;
-const ALL_TABS = ["dashboard", "reports", "leads", "freshleads", "taskmanagement", "team", "portalusers", "callingteam", "security"];
+const ALL_TABS = ["dashboard", "reports", "leads", "freshleads", "taskmanagement", "team", "portalusers", "callingteam", "customersearch", "security"];
 
 const mobile10 = value => {
   const digits = String(value || "").replace(/\D/g, "");
@@ -263,7 +264,7 @@ function publicSession(document) {
 async function sessionFor(request) {
   if (request.auth?.token?.panel !== "marketing") throw new HttpsError("unauthenticated", "Sign in required.");
   const ref = db.collection("_panelSessions").doc(request.auth.uid), snapshot = await ref.get();
-  if (!snapshot.exists || snapshot.data().panel !== "marketing" || snapshot.data().revoked === true || snapshot.data().expiresAt.toMillis() <= Date.now()) {
+  if (!snapshot.exists || !validPanelSession(snapshot.data(), "marketing")) {
     throw new HttpsError("unauthenticated", "Session expired.");
   }
   const owner = await ownerForId(snapshot.data().ownerId);
@@ -347,10 +348,11 @@ exports.marketingCreateSessionFromTwoFactor = onCall({ region: REGION, cors: tru
   const uid = `panel_${hash(`marketing:${owner.id}:${actor.id}:${crypto.randomBytes(24).toString("hex")}`).slice(0, 48)}`;
   const prior = await db.collection("_panelSessions").where("ownerId", "==", owner.id).get();
   const previous = prior.docs.map(publicSession).filter(session => session.actorId === actor.id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0] || null;
-  const now = Timestamp.now(), expiresAt = Timestamp.fromMillis(Date.now() + SESSION_MS);
+  const now = Timestamp.now(), expiresAt = Timestamp.fromMillis(dailySessionExpiry(now.toMillis()));
+  claims.sessionExpiresAt = expiresAt.toMillis();
   await db.collection("_panelSessions").doc(uid).set({
     panel: "marketing", ownerId: owner.id, actorId: actor.id, actorName: claims.name, actorType: actor.actorType,
-    ip: ipOf(request), location: locationOf(request), device: deviceOf(request), createdAt: now, lastSeenAt: now, expiresAt, revoked: false,
+    ip: ipOf(request), location: locationOf(request), device: deviceOf(request), createdAt: now, lastSeenAt: now, expiresAt, loginDay: sessionDayKey(now.toMillis()), revoked: false,
   });
   return { token: await getAuth().createCustomToken(uid, claims), expiresAt: expiresAt.toMillis(), loginAlert: previous };
 });
@@ -358,7 +360,7 @@ exports.marketingCreateSessionFromTwoFactor = onCall({ region: REGION, cors: tru
 exports.marketingSessionStatus = onCall({ region: REGION, cors: true }, async request => {
   const { ref, data, owner } = await sessionFor(request);
   await ref.update({ lastSeenAt: FieldValue.serverTimestamp() });
-  return { valid: true, expiresAt: data.expiresAt.toMillis(), account: await accountPublic(owner) };
+  return { valid: true, serverNow: Date.now(), expiresAt: effectiveSessionExpiry(data), account: await accountPublic(owner) };
 });
 
 exports.marketingUnlockSession = onCall({ region: REGION, cors: true }, async request => {
@@ -661,7 +663,7 @@ async function callingSessionFor(request) {
   if (request.auth?.token?.panel !== "calling") throw new HttpsError("unauthenticated", "Calling Team sign in required.");
   const ref = db.collection("_panelSessions").doc(request.auth.uid);
   const snapshot = await ref.get();
-  if (!snapshot.exists || snapshot.data().panel !== "calling" || snapshot.data().revoked === true || snapshot.data().expiresAt.toMillis() <= Date.now()) {
+  if (!snapshot.exists || !validPanelSession(snapshot.data(), "calling")) {
     throw new HttpsError("unauthenticated", "Session expired.");
   }
   const member = await callingMemberForId(snapshot.data().callingMemberId);
@@ -1183,10 +1185,11 @@ exports.callingCreateSessionFromTwoFactor = onCall(CALLING_PUBLIC_OPTIONS, async
   const uid = `panel_${hash(`calling:${member.id}:${crypto.randomBytes(24).toString("hex")}`).slice(0, 48)}`;
   const prior = await db.collection("_panelSessions").where("callingMemberId", "==", member.id).get();
   const previous = prior.docs.map(publicSession).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0] || null;
-  const now = Timestamp.now(), expiresAt = Timestamp.fromMillis(Date.now() + SESSION_MS);
+  const now = Timestamp.now(), expiresAt = Timestamp.fromMillis(dailySessionExpiry(now.toMillis()));
+  claims.sessionExpiresAt = expiresAt.toMillis();
   await db.collection("_panelSessions").doc(uid).set({
     panel: "calling", ownerId: owner.id, callingMemberId: member.id, actorId: member.id, actorName: claims.name, actorType: "calling",
-    ip: ipOf(request), location: locationOf(request), device: deviceOf(request), createdAt: now, lastSeenAt: now, expiresAt, revoked: false,
+    ip: ipOf(request), location: locationOf(request), device: deviceOf(request), createdAt: now, lastSeenAt: now, expiresAt, loginDay: sessionDayKey(now.toMillis()), revoked: false,
   });
   return { token: await getAuth().createCustomToken(uid, claims), expiresAt: expiresAt.toMillis(), loginAlert: previous };
 });
@@ -1196,7 +1199,8 @@ exports.callingSessionStatus = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   await ref.update({ lastSeenAt: FieldValue.serverTimestamp() });
   return {
     valid: true,
-    expiresAt: data.expiresAt.toMillis(),
+    serverNow: Date.now(),
+    expiresAt: effectiveSessionExpiry(data),
     account: {
       id: member.id,
       mteamId: owner.id,
@@ -1276,4 +1280,30 @@ exports.callingSaveFollowup = onCall(CALLING_PUBLIC_OPTIONS, async request => {
   });
   callingBundleCache.invalidate(`${owner.id}:${member.id}:5000`);
   return { ok: true, leadStatus: status, nextFollowupDate, lastNote: note };
+});
+
+// Read-only universal lookup. Assigned lead reads/writes and attribution are
+// unchanged; universal access exists only through this sanitized callable.
+exports.panelCustomerSearch = onCall(CALLING_PUBLIC_OPTIONS, async request => {
+  if (request.auth?.token?.panel === "marketing") {
+    const { owner } = await sessionFor(request);
+    const { actorType, tabs } = request.auth.token;
+    if (actorType !== "owner" && !(actorType === "subuser" && safeTabs(tabs).includes("customersearch"))) {
+      throw new HttpsError("permission-denied", "Customer Search access is not assigned to this Portal User.");
+    }
+    if (actorType === "subuser") {
+      const actor = await actorFor(owner, request.auth.token.subUserId);
+      if (!safeTabs(actor.tabs).includes("customersearch")) {
+        throw new HttpsError("permission-denied", "Customer Search access is no longer assigned.");
+      }
+    }
+  } else if (request.auth?.token?.panel === "calling") {
+    await callingSessionFor(request);
+  } else {
+    throw new HttpsError("unauthenticated", "Marketing or Calling Team sign in required.");
+  }
+  const mobile = normalizeLookupMobile(request.data?.mobile);
+  if (!mobile) throw new HttpsError("invalid-argument", "Enter a valid 10-digit Indian mobile number.");
+  await rateLimit("panel_customer_search", request.auth.uid, 30, 60 * 1000);
+  return lookupRegisteredCustomer(db, mobile);
 });

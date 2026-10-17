@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { signInWithCustomToken } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate } from "react-router";
+import PanelSessionLoading from "./PanelSessionLoading";
 import { auth, functions } from "../../Firebase";
 import { useCallingAuth } from "./CallingAuthContext";
 import { getDeviceInfo } from "../Utils/securityDevice";
@@ -19,8 +20,7 @@ function messageFor(error) {
 }
 
 export default function CallingSecureLogin() {
-  const navigate = useNavigate();
-  const { loading: checking, session, unlocked, unlock, markUnlocked } = useCallingAuth();
+  const { loading: checking, session, unlocked, error: sessionError, retry } = useCallingAuth();
   const [email, setEmail] = useState("");
   const [maskedEmail, setMaskedEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -33,7 +33,7 @@ export default function CallingSecureLogin() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  if (checking) return <Box title="Calling Team Login">Checking session…</Box>;
+  if (checking) return <PanelSessionLoading error={sessionError} retry={retry} />;
   if (session && unlocked) return <Navigate to="/calling-portal" replace />;
 
   const run = async (action) => {
@@ -43,24 +43,6 @@ export default function CallingSecureLogin() {
   const validatePassword = () => {
     if (!strongPassword(password)) throw new Error("Password में 8–12 characters, uppercase, lowercase, number और special character जरूरी है।");
   };
-
-  if (session) {
-    const unlockNow = event => {
-      event.preventDefault();
-      void run(async () => {
-        validatePassword();
-        await unlock(password);
-        navigate("/calling-portal", { replace: true });
-      });
-    };
-    return <Box title="Calling Team Session Locked" sub="Refresh के बाद केवल password डालें; OTP दोबारा नहीं चाहिए।">
-      <form onSubmit={unlockNow} style={{ display: "grid", gap: 12 }}>
-        <input style={input} type="password" autoComplete="current-password" maxLength={12} value={password} onChange={event => setPassword(event.target.value)} placeholder="Strong password" />
-        <Button busy={busy}>Unlock Panel</Button>
-      </form>
-      <ErrorMessage>{error}</ErrorMessage>
-    </Box>;
-  }
 
   const send = event => {
     event.preventDefault();
@@ -93,12 +75,10 @@ export default function CallingSecureLogin() {
       if (!account?.passwordConfigured && password !== confirmPassword) throw new Error("दोनों passwords समान होने चाहिए।");
       const result = await httpsCallable(functions, "callingCreateSessionFromTwoFactor")({ challengeId, loginTicket: ticket, password, device: getDeviceInfo() });
       await signInWithCustomToken(auth, result.data.token);
-      markUnlocked();
       if (result.data.loginAlert) {
         const previous = result.data.loginAlert;
         alert(`Last login: ${new Date(previous.createdAt).toLocaleString()}\n${previous.device?.label || "Unknown device"}\nIP: ${previous.ip || "Unavailable"}\n${previous.location || "Location unavailable"}`);
       }
-      navigate("/calling-portal", { replace: true });
     });
   };
 

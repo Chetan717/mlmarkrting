@@ -6,6 +6,7 @@ import Paginator from "./Paginator";
 const TEAM_PER_PAGE = 10;
 
 const ALL_TABS = [
+  { id: "customersearch", label: "Customer Search", desc: "Read-only mobile lookup of registered app customers" },
   { id: "dashboard", label: "Commission Dashboard",  desc: "Earnings, stats & commission overview" },
   { id: "reports",   label: "Monthly Report",        desc: "Month-wise subscription & revenue report" },
   { id: "leads",     label: "Lead Management",       desc: "New users, renewals, early expiry & follow-ups" },

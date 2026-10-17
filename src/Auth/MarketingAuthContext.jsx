@@ -1,43 +1,25 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { onIdTokenChanged, signOut } from "firebase/auth";
-import { auth, functions } from "../../Firebase";
-import { httpsCallable } from "firebase/functions";
+import { createContext, useContext } from "react";
 import { clearSession, saveSession } from "../Utils/sessionManager";
+import { useVerifiedPanelSession } from "./useVerifiedPanelSession";
 
 const AuthContext = createContext(null);
+const buildSession = (user, claims, account) => ({
+  uid: user.uid, role: claims.actorType === "owner" ? "member" : "subuser",
+  mteamId: claims.mteamId, subUserId: claims.subUserId || null,
+  name: claims.name || "Member", mobile: claims.mobile || "",
+  parentMobile: claims.parentMobile || "",
+  tabs: Array.isArray(claims.tabs) ? claims.tabs : [],
+  marketingMemberName: account.name || claims.name || "Member",
+  loginEmailMasked: account.loginEmailMasked || "",
+  parentMteamId: account.parentMteamId || "", parentName: account.parentName || "",
+  commissionPercentage: Number(account.commissionPercentage || 0),
+  uplineBonusPercentage: Number(account.uplineBonusPercentage || 0),
+  couponCode: account.couponCode || "", referCode: account.referCode || "",
+});
+
 export function MarketingAuthProvider({ children }) {
-  const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState(null);
-  const [unlocked, setUnlocked] = useState(false);
-  useEffect(() => onIdTokenChanged(auth, async (user) => {
-    if (!user) { clearSession(); setSession(null); setUnlocked(false); setLoading(false); return; }
-    try {
-    const token = await user.getIdTokenResult();
-    if (token.claims.panel !== "marketing") { clearSession(); setSession(null); setUnlocked(false); setLoading(false); return; }
-    const statusResult = await httpsCallable(functions, "marketingSessionStatus")({});
-    const account = statusResult.data?.account || {};
-    const next = {
-      uid: user.uid, role: token.claims.actorType === "owner" ? "member" : "subuser",
-      mteamId: token.claims.mteamId, subUserId: token.claims.subUserId || null,
-      name: token.claims.name || "Member", mobile: token.claims.mobile || "",
-      parentMobile: token.claims.parentMobile || "",
-      tabs: Array.isArray(token.claims.tabs) ? token.claims.tabs : [],
-      marketingMemberName: account.name || token.claims.name || "Member",
-      loginEmailMasked: account.loginEmailMasked || "",
-      parentMteamId: account.parentMteamId || "",
-      parentName: account.parentName || "",
-      commissionPercentage: Number(account.commissionPercentage || 0),
-      uplineBonusPercentage: Number(account.uplineBonusPercentage || 0),
-      couponCode: account.couponCode || "",
-      referCode: account.referCode || "",
-    };
-    saveSession(next); setSession(next); setLoading(false);
-    } catch (_) { clearSession(); setSession(null); setUnlocked(false); await signOut(auth).catch(()=>null); setLoading(false); }
-  }), []);
-  const value = useMemo(() => ({ loading, session, unlocked, markUnlocked:()=>setUnlocked(true), unlock:async password=>{await httpsCallable(functions,"marketingUnlockSession")({password});setUnlocked(true);}, logout: async () => {
-    await httpsCallable(functions, "marketingPanelLogout")({}).catch(() => null);
-    clearSession(); await signOut(auth); setSession(null); setUnlocked(false);
-  }}), [loading, session, unlocked]);
+  const value = useVerifiedPanelSession({ panel: "marketing", statusEndpoint: "marketingSessionStatus",
+    logoutEndpoint: "marketingPanelLogout", buildSession, save: saveSession, clear: clearSession });
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 export function useMarketingAuth() { return useContext(AuthContext); }

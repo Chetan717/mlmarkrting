@@ -1,3 +1,4 @@
+import { companyForLead } from "../../Utils/company";
 import { cachedMarketingRead, getSuccessfulSubscriptionRows } from "../../Utils/marketingReadCache";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
@@ -375,7 +376,7 @@ function ViewModal({ lead, onClose, onFollowup }) {
             <>
               <p style={{ margin: "16px 0 10px", fontSize: 11, fontWeight: 700, color: "var(--p-text-4)", textTransform: "uppercase", letterSpacing: "0.06em" }}>MLM Profile</p>
               <Row label="Full Name" value={mlmProfile.fullName} />
-              <Row label="Company" value={mlmProfile.companyName} />
+              <Row label="Company Name" value={companyForLead(user, mlmProfile, subscription) || "—"} />
               <Row label="Designation" value={mlmProfile.designation} />
             </>
           )}
@@ -596,7 +597,7 @@ export default function LeadManagement({ mteamSession }) {
       if (q) {
         const nameMatch = (user.name ?? "").toLowerCase().includes(q);
         const mobileMatch = (user.mobileNo ?? "").toLowerCase().includes(q);
-        const compMatch = (mlmProfile?.companyName ?? "").toLowerCase().includes(q);
+        const compMatch = companyForLead(user, mlmProfile, subscription).toLowerCase().includes(q);
         if (!nameMatch && !mobileMatch && !compMatch) return false;
       }
       if (filters.leadStatus !== "all") {
@@ -623,7 +624,7 @@ export default function LeadManagement({ mteamSession }) {
         if (n === "15" && (days < 0 || days > 15)) return false;
       }
       if (filters.company !== "all") {
-        const comp = mlmProfile?.companyName ?? subscription?.company ?? "";
+        const comp = companyForLead(user, mlmProfile, subscription);
         if (comp !== filters.company) return false;
       }
       return true;
@@ -636,10 +637,9 @@ export default function LeadManagement({ mteamSession }) {
 
   // Companies list: prefer Firestore mlmcomp, fall back to companies from leads data
   const companiesList = useMemo(() => {
-    if (mlmCompanies.length > 0) return mlmCompanies;
-    const set = new Set();
-    leads.forEach(({ mlmProfile, subscription }) => {
-      const c = mlmProfile?.companyName ?? subscription?.company;
+    const set = new Set(mlmCompanies);
+    leads.forEach(({ user, mlmProfile, subscription }) => {
+      const c = companyForLead(user, mlmProfile, subscription);
       if (c) set.add(c);
     });
     return [...set].sort();
@@ -987,7 +987,7 @@ export default function LeadManagement({ mteamSession }) {
             <>
               {/* Desktop table */}
               <div className="leads-table-wrap" style={{ overflowX: "auto", borderRadius: 14, border: "1px solid var(--p-border)", marginBottom: 16 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1240 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1380 }}>
                   <thead>
                     <tr style={{ background: "var(--p-card2)" }}>
                       <th style={th()}>
@@ -1001,6 +1001,7 @@ export default function LeadManagement({ mteamSession }) {
                       <th style={th()}>Mobile</th>
                       <th style={th()}>Password</th>
                       <th style={th()}>MLM Profile</th>
+                      <th style={th()}>Company Name</th>
                       <th style={th()}>Plan Status</th>
                       <th style={th()}>Plan</th>
                       <th style={th()}>Expiry</th>
@@ -1073,6 +1074,7 @@ export default function LeadManagement({ mteamSession }) {
                               {mlmProfile ? "Yes" : "No"}
                             </span>
                           </td>
+                          <td style={td()}>{companyForLead(user, mlmProfile, subscription) || "—"}</td>
                           <td style={td()}><PlanStatusBadge subscription={subscription} /></td>
                           <td style={td()}>
                             <span style={{ fontSize: 12, color: "var(--p-text-3)" }}>{subscription?.plan ?? "—"}</span>
@@ -1180,6 +1182,8 @@ export default function LeadManagement({ mteamSession }) {
                         )}
                         {days !== null && <DaysLeftBadge days={days} />}
                         {mlmProfile && <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700, background: "#10b98115", color: "#10b981" }}>MLM ✓</span>}
+
+                        <span style={{ fontSize: 12, color: "var(--p-text-3)", flexBasis: "100%" }}>Company Name: <b>{companyForLead(user, mlmProfile, subscription) || "—"}</b></span>
 
                         {/* Joined date */}
                         <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700, background: "var(--p-card2)", color: "var(--p-text-3)", border: "1px solid var(--p-border)" }}>

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { signInWithCustomToken } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate } from "react-router";
+import PanelSessionLoading from "./PanelSessionLoading";
 import { auth, functions } from "../../Firebase";
 import { useMarketingAuth } from "./MarketingAuthContext";
 import { getDeviceInfo } from "../Utils/securityDevice";
@@ -18,23 +19,17 @@ const messageFor = error => {
 };
 
 export function SecureLogin() {
-  const navigate = useNavigate();
-  const { loading: checking, session, unlocked, unlock, markUnlocked } = useMarketingAuth();
+  const { loading: checking, session, unlocked, error: sessionError, retry } = useMarketingAuth();
   const [email, setEmail] = useState(""), [maskedEmail, setMaskedEmail] = useState("");
   const [otp, setOtp] = useState(""), [challengeId, setChallengeId] = useState(""), [ticket, setTicket] = useState("");
   const [actors, setActors] = useState([]), [actor, setActor] = useState(null);
   const [password, setPassword] = useState(""), [confirmPassword, setConfirmPassword] = useState("");
   const [step, setStep] = useState("email"), [busy, setBusy] = useState(false), [error, setError] = useState("");
 
-  if (checking) return <Box>Checking session…</Box>;
+  if (checking) return <PanelSessionLoading error={sessionError} retry={retry} />;
   if (session && unlocked) return <Navigate to="/mportal" replace />;
   const run = async action => { setBusy(true); setError(""); try { await action(); } catch (caught) { setError(messageFor(caught)); } finally { setBusy(false); } };
   const validatePassword = () => { if (!strongPassword(password)) throw new Error("Password में 8–12 characters, uppercase, lowercase, number और special character जरूरी है।"); };
-
-  if (session) {
-    const unlockNow = event => { event.preventDefault(); void run(async () => { validatePassword(); await unlock(password); navigate("/mportal", { replace: true }); }); };
-    return <Box title="Session Locked" sub="Refresh के बाद केवल password डालें; OTP दोबारा नहीं चाहिए।"><form onSubmit={unlockNow} style={{ display: "grid", gap: 12 }}><input style={input} type="password" autoComplete="current-password" maxLength={12} value={password} onChange={event => setPassword(event.target.value)} placeholder="Strong password" /><Button busy={busy}>Unlock Panel</Button></form><ErrorMessage>{error}</ErrorMessage></Box>;
-  }
 
   const send = event => {
     event.preventDefault();
@@ -59,12 +54,11 @@ export function SecureLogin() {
       validatePassword();
       if (!actor?.passwordConfigured && password !== confirmPassword) throw new Error("दोनों passwords समान होने चाहिए।");
       const result = await httpsCallable(functions, "marketingCreateSessionFromTwoFactor")({ challengeId, loginTicket: ticket, actorId: actor.id, password, device: getDeviceInfo() });
-      await signInWithCustomToken(auth, result.data.token); markUnlocked();
+      await signInWithCustomToken(auth, result.data.token);
       if (result.data.loginAlert) {
         const previous = result.data.loginAlert;
         alert(`Last login: ${new Date(previous.createdAt).toLocaleString()}\n${previous.device?.label || "Unknown device"}\nIP: ${previous.ip || "Unavailable"}\n${previous.location || "Location unavailable"}`);
       }
-      navigate("/mportal", { replace: true });
     });
   };
 

@@ -1,3 +1,5 @@
+import { preferredProfile } from "./company.js";
+
 const PROFILE_LOOKUP_BATCH_SIZE = 5000;
 const VALID_MOBILE_PATTERN = /^\d{10}$/;
 
@@ -18,8 +20,8 @@ export function indexMlmProfiles(profiles = []) {
 
   for (const profile of profiles) {
     const mobile = normalizeMobile(profile?.mobile);
-    if (!VALID_MOBILE_PATTERN.test(mobile) || byMobile.has(mobile)) continue;
-    byMobile.set(mobile, profile);
+    if (!VALID_MOBILE_PATTERN.test(mobile)) continue;
+    byMobile.set(mobile, preferredProfile(byMobile.get(mobile), profile));
   }
 
   return byMobile;
@@ -94,10 +96,10 @@ export async function fetchMlmProfiles(mobiles, profileLookup) {
 
     for (const profile of profiles) {
       const mobile = normalizeMobile(profile?.mobile);
-      if (!mobile || !requestedSet.has(mobile) || profilesByMobile.has(mobile)) {
+      if (!mobile || !requestedSet.has(mobile)) {
         continue;
       }
-      profilesByMobile.set(mobile, profile);
+      profilesByMobile.set(mobile, preferredProfile(profilesByMobile.get(mobile), profile));
     }
   }
 

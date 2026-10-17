@@ -1,3 +1,4 @@
+import { companyForLead } from "../../Utils/company";
 import { useState, useEffect, useMemo } from "react";
 import { auth } from "../../../Firebase";
 import { cachedMarketingRead, getSuccessfulSubscriptionRows } from "../../Utils/marketingReadCache";
@@ -10,6 +11,8 @@ import { COLL } from "../../Utils/collections";
 import {
   calculateMlmProfileStats,
   fetchMlmProfiles,
+  indexMlmProfiles,
+  getMlmProfileByMobile,
 } from "../../Utils/mlmProfile";
 import { formatLastDownload } from "../../Utils/lastDownload";
 
@@ -315,6 +318,8 @@ export default function MarketingDashboard({ mteamSession } = {}) {
 
   useEffect(() => { setPage(1); }, [search, filterStatus, sortBy]);
 
+  const profilesByMobile = useMemo(() => indexMlmProfiles(mlmProfiles), [mlmProfiles]);
+
   // ── derived stats ──────────────────────────────────────────────────────
   const commPct     = couponDoc?.marketing_member_percentage ?? 0;
   const discountPct = couponDoc?.user_discount ?? 0;
@@ -604,8 +609,8 @@ export default function MarketingDashboard({ mteamSession } = {}) {
             <table style={{ width:"100%", borderCollapse:"collapse", minWidth:720 }}>
               <thead>
                 <tr style={{ background:"var(--p-card2)" }}>
-                  {["#","Name / Mobile","Plan","Status","Amount","Commission","Purchase Date","Last Download","Action"].map((h,i) => (
-                    <th key={h} style={{ padding:"11px 14px", fontSize:11, fontWeight:700, color:"var(--p-text-4)", textTransform:"uppercase", letterSpacing:"0.06em", textAlign: i>=4 && i<=6 ? "right" : i===8 ? "center" : "left", borderBottom:"2px solid var(--p-border)", whiteSpace:"nowrap" }}>{h}</th>
+                  {["#","Name / Mobile","Company Name","Plan","Status","Amount","Commission","Purchase Date","Last Download","Action"].map((h) => (
+                    <th key={h} style={{ padding:"11px 14px", fontSize:11, fontWeight:700, color:"var(--p-text-4)", textTransform:"uppercase", letterSpacing:"0.06em", textAlign: ["Amount", "Commission", "Purchase Date"].includes(h) ? "right" : h === "Action" ? "center" : "left", borderBottom:"2px solid var(--p-border)", whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -632,6 +637,7 @@ export default function MarketingDashboard({ mteamSession } = {}) {
                           </div>
                         </div>
                       </td>
+                      <td style={{ padding:"11px 14px", fontSize:12, color:"var(--p-text-3)" }}>{companyForLead(user, getMlmProfileByMobile(profilesByMobile, sub.mobileNo), sub) || "—"}</td>
                       <td style={{ padding:"11px 14px" }}>
                         <span style={{ padding:"2px 10px", borderRadius:6, background:planColor(sub.plan)+"22", color:planColor(sub.plan), fontSize:11, fontWeight:700 }}>{sub.plan ?? "—"}</span>
                       </td>
@@ -702,6 +708,7 @@ export default function MarketingDashboard({ mteamSession } = {}) {
                   ["Coupon Used", sub.couponApplied ?? "—"],
                   ["Order ID",    sub.OrderId ?? "—"],
                   ["Last Download", formatLastDownload(user?.lastDownloadAt)],
+                  ["Company Name", companyForLead(user, getMlmProfileByMobile(profilesByMobile, sub.mobileNo), sub) || "—"],
                 ].map(([k,v]) => (
                   <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"9px 0", borderBottom:"1px solid var(--p-border)" }}>
                     <span style={{ fontSize:12, color:"var(--p-text-4)", fontWeight:600 }}>{k}</span>

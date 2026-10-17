@@ -1,3 +1,5 @@
+import CustomerSearch from "../CustomerSearch";
+import { usePanelSidebar } from "../../Utils/usePanelSidebar";
 // Updated MteamPortal: WhatsApp sharing includes the Google Play Install Referrer code.
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
@@ -254,6 +256,7 @@ const ALL_TABS = [
   { id: "team", label: "My Team", shortLabel: "Team", icon: IcTeam },
   { id: "portalusers", label: "Portal Users", shortLabel: "Users", icon: IcTeam },
   { id: "callingteam", label: "My Calling Team", shortLabel: "Calling", icon: IcTeam },
+  { id: "customersearch", label: "Customer Search", shortLabel: "Search", icon: IcLeads },
 ];
 
 export default function MteamPortal() {
@@ -265,9 +268,9 @@ export default function MteamPortal() {
     const allowed = current?.tabs ?? ["dashboard"];
     return allowed[0] ?? "dashboard";
   });
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { sidebarOpen, toggleSidebar, closeSidebar, closeOnMobile } = usePanelSidebar();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [sessionExpiry] = useState(() => getSession()?._expiresAt ?? null);
+  const sessionExpiry = session?._expiresAt ?? null;
   const [couponCode, setCouponCode] = useState("");
   const profileRef = useRef(null);
 
@@ -383,7 +386,7 @@ export default function MteamPortal() {
 
   const switchTab = (id) => {
     setActiveTab(id);
-    setSidebarOpen(false);
+    closeOnMobile();
   };
 
   const handleWhatsAppShare = () => {
@@ -436,6 +439,7 @@ export default function MteamPortal() {
   };
 
   const renderContent = () => {
+    if (activeTab === "customersearch" && allowedTabs.some(tab => tab.id === "customersearch")) return <CustomerSearch />;
     if (activeTab === "dashboard") return <MainTeam mteamSession={session} />;
     if (activeTab === "reports")
       return (
@@ -479,8 +483,8 @@ export default function MteamPortal() {
     >
       {/* ── OVERLAY (mobile sidebar) ─────────────────────────────────── */}
       {sidebarOpen && (
-        <div
-          onClick={() => setSidebarOpen(false)}
+        <div className="mteam-sidebar-backdrop"
+          onClick={closeSidebar}
           style={{
             position: "fixed",
             inset: 0,
@@ -492,7 +496,7 @@ export default function MteamPortal() {
       )}
 
       {/* ── SIDEBAR ──────────────────────────────────────────────────── */}
-      <aside className={`mteam-sidebar${sidebarOpen ? " sidebar-open" : ""}`}>
+      <aside id="marketing-sidebar" aria-label="Marketing navigation" inert={!sidebarOpen} className={`mteam-sidebar${sidebarOpen ? " sidebar-open" : ""}`}>
         {/* Logo + Close btn */}
         <div
           style={{
@@ -522,7 +526,8 @@ export default function MteamPortal() {
           </div>
           <button
             className="sidebar-close-btn"
-            onClick={() => setSidebarOpen(false)}
+            aria-label="Close menu"
+            onClick={closeSidebar}
             style={{
               background: "none",
               border: "none",
@@ -854,10 +859,13 @@ export default function MteamPortal() {
             background: "var(--p-card)",
           }}
         >
-          {/* Hamburger — mobile only */}
+          {/* Menu remains accessible with the sidebar closed. */}
           <button
             className="mteam-hamburger"
-            onClick={() => setSidebarOpen(true)}
+            aria-label={sidebarOpen ? "Hide menu" : "Open menu"}
+            aria-expanded={sidebarOpen}
+            aria-controls="marketing-sidebar"
+            onClick={toggleSidebar}
             style={{
               background: "none",
               border: "none",
@@ -1078,7 +1086,7 @@ export default function MteamPortal() {
                 key={tab.id}
                 onClick={() => switchTab(tab.id)}
                 style={{
-                  flex: 1,
+                  flex: "0 0 76px",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
@@ -1166,6 +1174,7 @@ export default function MteamPortal() {
           height: 64px;
           min-height: 64px;
           flex-shrink: 0;
+          overflow-x: auto;
           padding: 0 4px;
           padding-bottom: env(safe-area-inset-bottom, 0px);
         }
@@ -1180,13 +1189,15 @@ export default function MteamPortal() {
         /* ── Desktop (≥768px) ─────────────────────────── */
         @media (min-width: 768px) {
           .mteam-sidebar {
-            transform: translateX(0) !important;
+            display: none;
+            transform: translateX(0);
             position: relative !important;
             box-shadow: none;
           }
-          .sidebar-close-btn { display: none !important; }
+          .mteam-sidebar.sidebar-open { display: flex; }
+          .mteam-sidebar-backdrop { display: none; }
           .mteam-bottom-nav  { display: none !important; }
-          .mteam-hamburger   { display: none !important; }
+          .mteam-hamburger   { display: flex !important; }
           .header-logo       { display: none !important; }
           .desktop-profile   { display: block !important; }
           .theme-label       { display: inline !important; }
